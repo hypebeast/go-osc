@@ -45,10 +45,12 @@
 package osc
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"time"
 )
@@ -59,6 +61,11 @@ const (
 	timeTagImmediate      = uint64(1)
 	secondsFrom1900To1970 = 2208988800
 )
+
+// OscPacket defines the interface for OscMessage and OscBundle.
+type OscPacket interface {
+	ToByteArray() (buffer []byte, err error)
+}
 
 // A single OSC message.
 type OscMessage struct {
@@ -73,25 +80,92 @@ type OscBundle struct {
 	bundles  []*OscBundle
 }
 
-// An OSC client. It sends OSC messages and bundles to a given endpoint
-// (IP address and Port).
+// An OSC client. It sends OSC messages and bundles to the given IP address
+// and port.
 type OscClient struct {
-	endpoint Endpoint
+	ipaddress string
+	port      int
 }
 
-// An OSC server. It listens on Port for incoming OSC messages and bundles.
+// Interface for an OSC Packet dispatcher.
+type Dispatcher interface {
+	Dispatch(packet *OscPacket)
+}
+
+// OSC message handler interface. Every handler function for an OSC message must
+// implement this interface.
+type Handler interface {
+	HandleMessage(msg *OscMessage)
+}
+
+// Type defintion for an OSC handler function
+type HandlerFunc func(msg *OscMessage)
+
+// HandleMessage calls themeself with the given OSC Message.
+func (f HandlerFunc) HandleMessage(msg *OscMessage) {
+	f(msg)
+}
+
+// Dispatcher for OSC Packets.
+type OscDispatcher struct {
+	handlers map[string]Handler
+}
+
+// NewOscDispatcher returns an OscDispatcher
+func NewOscDispatcher() (dispatcher *OscDispatcher) {
+	return &OscDispatcher{handlers: make(map[string]Handler)}
+}
+
+// AddMsgHandler adds a new message handler for the given OSC address.
+func (self *OscDispatcher) AddMsgHandler(address string, handler HandlerFunc) {
+	self.handlers[address] = handler
+}
+
+// AddMsgHandlerFunc adds a new message handler for the given OSC address and
+// handler function.
+func (self *OscDispatcher) AddMsgHandlerFunc(address string, handler func(msg *OscMessage)) {
+	self.AddMsgHandler(address, HandlerFunc(handler))
+}
+
+// Dispatch dispatches OSC messages.
+func (self *OscDispatcher) Dispatch(packet *OscPacket) {
+	switch (*packet).(type) {
+	default:
+		return
+
+	case *OscMessage:
+		msg, _ := (*packet).(*OscMessage)
+		for address, handler := range self.handlers {
+			if msg.Match(address) {
+				handler.HandleMessage(msg)
+			}
+		}
+
+	case *OscBundle:
+		bundle, _ := (*packet).(*OscBundle)
+		for _, message := range bundle.messages {
+			for address, handler := range self.handlers {
+				if message.Match(address) {
+					handler.HandleMessage(message)
+				}
+			}
+		}
+
+		// TODO: Process bundles
+	}
+}
+
+// An OSC server. The server listens on Address and Port for incoming OSC messages
+// and bundles.
 type OscServer struct {
-	Port int
+	Address     string        // Address to listen on
+	Port        int           // Port to listen on
+	dispatcher  Dispatcher    // Dispatcher that dispatches OSC packets
+	ReadTimeout time.Duration // Read Timeout
 }
 
-// OSC IP endpoint, consisting of an IP address and a port.
-type Endpoint struct {
-	address string
-	port    int
-}
-
-// OscTimetag represents an OSC timetag.
-// An OSC timetage is defined as follows:
+// OscTimetag represents an OSC Time Tag.
+// An OSC Time Tag is defined as follows:
 // Time tags are represented by a 64 bit fixed point number. The first 32 bits
 // specify the number of seconds since midnight on January 1, 1900, and the
 // last 32 bits specify fractional parts of a second to a precision of about
@@ -99,7 +173,7 @@ type Endpoint struct {
 type OscTimetag struct {
 	timeTag  uint64
 	time     time.Time
-	MinValue uint64
+	MinValue uint64 // Minimum value of an OSC Time Tag. Is always 1.
 }
 
 // NewMessage returns a new OscMessage. The argument address is the OSC address.
@@ -107,13 +181,13 @@ func NewOscMessage(address string) (msg *OscMessage) {
 	return &OscMessage{Address: address}
 }
 
-// Append adds the given argument to the end of the arguments list.
+// Append appends the given argument to the arguments list.
 func (msg *OscMessage) Append(argument interface{}) (err error) {
 	if argument == nil {
 		return err
 	}
 
-	msg.Arguments = append(msg.Arguments, argument)
+	msg.arguments = append(msg.arguments, argument)
 
 	return nil
 }
@@ -126,19 +200,18 @@ func (msg *OscMessage) Equals(b *OscMessage) bool {
 	return true
 }
 
-// Clear clears the OSC address and clear any arguments appended so far.
+// Clear clears the OSC address and clears any arguments appended so far.
 func (msg *OscMessage) Clear() {
 	msg.Address = ""
 	msg.ClearData()
 }
 
-// ClearData clears all data from the OscMessage. It removes all arguments from
-// the
+// ClearData removes all arguments from the OSC Message.
 func (msg *OscMessage) ClearData() {
 	msg.arguments = msg.arguments[len(msg.arguments):]
 }
 
-// Returns true, if the Address of the OscElement matches the given address.
+// Returns true, if the address of the OSC Message matches the given address.
 // Case sensitive!
 func (msg *OscMessage) Match(address string) bool {
 	// TODO
@@ -164,8 +237,9 @@ func (msg *OscMessage) ToByteArray() (buffer []byte, err error) {
 	// Type tag string starts with ","
 	typetags := []byte{','}
 
+	// Process the type tags and collect all arguments
 	var payload = new(bytes.Buffer)
-	for _, arg := range msg.Arguments {
+	for _, arg := range msg.arguments {
 		switch t := arg.(type) {
 		default:
 			return nil, errors.New(fmt.Sprintf("OSC - unsupported type: %T", t))
@@ -230,7 +304,7 @@ func (msg *OscMessage) ToByteArray() (buffer []byte, err error) {
 		}
 	}
 
-	// Write the typetags string
+	// Write the type tag string to the data buffer
 	_, err = writePaddedString(string(typetags), data)
 	if err != nil {
 		return nil, err
@@ -242,24 +316,78 @@ func (msg *OscMessage) ToByteArray() (buffer []byte, err error) {
 	return data.Bytes(), nil
 }
 
-// FromByteBuffer deserializes the OSC message from the given byte buffer.
-func (msg *OscMessage) FromByteArray(buffer bytes.Buffer) {
-
-}
-
-// NewOscBundle returns an OSC Bundle.
+// NewOscBundle returns an OSC Bundle. Use this function to create a new OSC
+// Bundle.
 func NewOscBundle(timetag time.Time) (bundle *OscBundle) {
-	return &OscBundle{timetag: NewOscTimetag(timetag)}
+	return &OscBundle{Timetag: *NewOscTimetag(timetag)}
 }
 
-// TODO
+// AppendMessage appends an OSC Message to the bundle.
 func (self *OscBundle) AppendMessage(msg *OscMessage) {
 	self.messages = append(self.messages, msg)
 }
 
-// TODO
+// AppendBundle appends an OSC Bundle to the bundle.
 func (self *OscBundle) AppendBundle(bundle *OscBundle) {
 	self.bundles = append(self.bundles, bundle)
+}
+
+// ToByteArray serializes the bundle to a byte array.
+func (self *OscBundle) ToByteArray() (buffer []byte, err error) {
+	var data = new(bytes.Buffer)
+
+	// Add the '#bundle' string
+	_, err = writePaddedString("#bundle", data)
+	if err != nil {
+		return nil, err
+	}
+
+	// Add the timetag
+	if _, err = data.Write(self.Timetag.ToByteArray()); err != nil {
+		return nil, err
+	}
+
+	// Process all OSC Messages
+	for _, m := range self.messages {
+		var msgLen int
+		var msgBuf []byte
+
+		msgBuf, err = m.ToByteArray()
+		if err != nil {
+			return nil, err
+		}
+
+		// Append the length of the OSC message
+		msgLen = len(msgBuf)
+		if err = binary.Write(data, binary.BigEndian, int32(msgLen)); err != nil {
+			return nil, err
+		}
+
+		// Append the OSC message
+		data.Write(msgBuf)
+	}
+
+	// Process all OSC Bundles
+	for _, b := range self.bundles {
+		var bLen int
+		var bBuf []byte
+
+		bBuf, err = b.ToByteArray()
+		if err != nil {
+			return nil, err
+		}
+
+		// Write the size of the bundle
+		bLen = len(bBuf)
+		if err = binary.Write(data, binary.BigEndian, int32(bLen)); err != nil {
+			return nil, err
+		}
+
+		// Append the bundle
+		data.Write(bBuf)
+	}
+
+	return data.Bytes(), nil
 }
 
 // NewOscClient creates a new OSC client. The OscClient is used to send OSC
@@ -267,23 +395,22 @@ func (self *OscBundle) AppendBundle(bundle *OscBundle) {
 // specifies the IP address and port defines the target port where the messages
 // and bundles will be send to.
 func NewOscClient(ip string, port int) (client *OscClient) {
-	return &OscClient{endpoint: Endpoint{address: ip, port: port}}
+	return &OscClient{ipaddress: ip, port: port}
 }
 
-// SendMessage sends an OscMessage.
-func (client *OscClient) SendMessage(message *OscMessage) (err error) {
-	addr, _ := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", client.endpoint.address, client.endpoint.port))
+// SendBundle sends an OSC Bundle or an OSC Message.
+func (client *OscClient) Send(bundle *OscPacket) (err error) {
+	addr, _ := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", client.ipaddress, client.port))
 	conn, err := net.DialUDP("udp", nil, addr)
 	if err != nil {
 		return err
 	}
 
-	data, err := message.toByteArray()
+	data, err := (*bundle).ToByteArray()
 	if err != nil {
-		return errors.New("Can't convert OSC message to byte array")
+		return nil
 	}
 
-	// Write the data to the connection
 	_, err = conn.Write(data)
 	if err != nil {
 		return err
@@ -292,12 +419,188 @@ func (client *OscClient) SendMessage(message *OscMessage) (err error) {
 	return nil
 }
 
-// SendBundle sends an OSC Bundle.
-func (client *OscClient) SendBundle(bundle OscBundle) (err error) {
-	addr, _ := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", client.endpoint.address, client.endpoint.port))
-	conn, err := net.DialUDP("udp", nil, addr)
+// NewOscServer returns a new OscServer.
+func NewOscServer(address string, port int) (server *OscServer) {
+	return &OscServer{
+		Address:     address,
+		Port:        port,
+		dispatcher:  NewOscDispatcher(),
+		ReadTimeout: 0}
+}
+
+// ListenAndServe retrieves incoming OSC packets.
+// TODO: Add support for server running in a goroutine
+func (self *OscServer) ListenAndServe() error {
+	if self.dispatcher == nil {
+		return errors.New("No dispatcher definied")
+	}
+
+	service := fmt.Sprintf("%s:%d", self.Address, self.Port)
+	udpAddr, err := net.ResolveUDPAddr("udp", service)
 	if err != nil {
 		return err
+	}
+
+	conn, err := net.ListenUDP("udp", udpAddr)
+	if err != nil {
+		return err
+	}
+
+	// Set read timeout
+	if self.ReadTimeout != 0 {
+		conn.SetReadDeadline(time.Now().Add(self.ReadTimeout))
+	}
+
+	for {
+		_, err := self.readFromConnection(conn)
+		if err != nil {
+			// TODO: Every dispatch should happen in a new goroutine
+			//self.dispatcher.Dispatch(bundle)
+		}
+	}
+
+	panic("Unreachable - This should never happen.")
+}
+
+// readFromConnection retrieves OSC packets from the given io.Reader. If an OSC
+// message is received an OSC Bundle will created and the message appended to the
+// bundle.
+func (self *OscServer) readFromConnection(r io.Reader) (bundle *OscBundle, err error) {
+	reader := bufio.NewReader(r)
+
+	var buf []byte
+
+	// Read the first byte from the reader. Otherwise, wait until some data is received.
+	buf, err = reader.Peek(1)
+	if err != nil {
+		return nil, err
+	}
+
+	// An OSC Message starts with a '/'
+	if buf[0] == '/' {
+		// Let's assume that the bundle starts immediate
+		bundle = NewOscBundle(time.Now())
+
+		var msg *OscMessage
+		msg, err = self.readMessage(reader)
+		if err == nil {
+			bundle.AppendMessage(msg)
+		}
+
+		return bundle, err
+	} else if buf[0] == '#' { // An OSC bundle starts with a '#'
+
+	}
+
+	return nil, nil
+}
+
+// readMessage reads one OSC Message from the given reader.
+func (self *OscServer) readMessage(reader *bufio.Reader) (msg *OscMessage, err error) {
+	// First, read the OSC address
+	address, err := readPaddedString(reader)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create a new message
+	msg = NewOscMessage(address)
+
+	// Now, read all arguments
+	if err = self.readArguments(msg, reader); err != nil {
+		return nil, err
+	}
+
+	return msg, nil
+}
+
+// readArguments reads all arguments from the reader and adds it to the OSC Message.
+func (self *OscServer) readArguments(msg *OscMessage, reader *bufio.Reader) error {
+	// Read the type tag string
+	typetags, err := readPaddedString(reader)
+	if err != nil {
+		return err
+	}
+
+	if typetags[0] != ',' {
+		return errors.New("Unsupported type tag string")
+	}
+
+	// Remove ',' from the type tag
+	typetags = typetags[1:]
+
+	for _, c := range typetags {
+		switch c {
+		default:
+			return errors.New(fmt.Sprintf("Unsupported type tag: %c", c))
+
+		// int32
+		case 'i':
+			var i int32
+			if err = binary.Read(reader, binary.BigEndian, &i); err != nil {
+				return err
+			}
+			msg.Append(i)
+
+		// int64
+		case 'h':
+			var i int64
+			if err = binary.Read(reader, binary.BigEndian, &i); err != nil {
+				return err
+			}
+			msg.Append(i)
+
+		// float32
+		case 'f':
+			var f float32
+			if err = binary.Read(reader, binary.BigEndian, &f); err != nil {
+				return err
+			}
+			msg.Append(f)
+
+		// float64/double
+		case 'd':
+			var d float64
+			if err = binary.Read(reader, binary.BigEndian, &d); err != nil {
+				return err
+			}
+			msg.Append(d)
+
+		// string
+		case 's':
+			var s string
+			if s, err = readPaddedString(reader); err != nil {
+				return err
+			}
+			msg.Append(s)
+
+		// blob
+		case 'b':
+
+		// OSC Time Tag
+		case 't':
+			var tt uint64
+			if err = binary.Read(reader, binary.BigEndian, &tt); err != nil {
+				return nil
+			}
+			msg.Append(NewOscTimetagFromTimetag(tt))
+
+		// True
+		case 'T':
+			var t bool
+			if err = binary.Read(reader, binary.BigEndian, &t); err != nil {
+				return err
+			}
+			msg.Append(t)
+
+		// False
+		case 'F':
+			var t bool
+			if err = binary.Read(reader, binary.BigEndian, &t); err != nil {
+				return err
+			}
+			msg.Append(t)
+		}
 	}
 
 	return nil
@@ -309,6 +612,17 @@ func NewOscTimetag(timeStamp time.Time) (timetag *OscTimetag) {
 		time:     timeStamp,
 		timeTag:  timeToTimetag(timeStamp),
 		MinValue: uint64(1)}
+}
+
+// NewOscTimetagFromTimetag creates a new OscTimetag from the given time tag.
+func NewOscTimetagFromTimetag(timetag uint64) (t *OscTimetag) {
+	time := timetagToTime(timetag)
+	return NewOscTimetag(time)
+}
+
+// Time returns the time.
+func (self *OscTimetag) Time() time.Time {
+	return self.time
 }
 
 // FractionalSecond returns the last 32 bits of the Osc Time Tag. Specifies the
@@ -323,7 +637,7 @@ func (self *OscTimetag) SecondsSinceEpoch() uint32 {
 	return uint32(self.timeTag >> 32)
 }
 
-// TimeTag returns the OSC time tag value
+// TimeTag returns the time tag value
 func (self *OscTimetag) TimeTag() uint64 {
 	return self.timeTag
 }
@@ -343,9 +657,9 @@ func (self *OscTimetag) SetTime(time time.Time) {
 
 // readBlob reads an OSC Blob from the blob byte array.
 func readBlob(data []byte) (blob []byte, err error) {
-	blob = new(bytes.Buffer)
+	var blobData = new(bytes.Buffer)
 
-	return blob.Bytes(), nil
+	return blobData.Bytes(), nil
 }
 
 // writeBlob writes the data byte array as an OSC blob into buff. If the length of
@@ -373,6 +687,30 @@ func writeBlob(data []byte, buff *bytes.Buffer) (numberOfBytes int, err error) {
 	}
 
 	return 4 + len(data) + numPadBytes, nil
+}
+
+// readPaddedString reads a padded string from the given reader. The padding bytes
+// are removed from the reader.
+func readPaddedString(reader *bufio.Reader) (str string, err error) {
+	// Read the string from the reader
+	str, err = reader.ReadString(0)
+	if err != nil {
+		return "", err
+	}
+
+	// Remove the delimiter
+	str = str[:len(str)-1]
+
+	// Remove the padding bytes
+	padLen := padBytesNeeded(len(str)) - 1
+	if padLen > 0 {
+		padBytes := make([]byte, padLen)
+		if _, err = reader.Read(padBytes); err != nil {
+			return "", err
+		}
+	}
+
+	return str, nil
 }
 
 // writePaddedString writes the argument str with padding bytes to the argument
