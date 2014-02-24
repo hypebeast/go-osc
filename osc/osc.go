@@ -81,7 +81,7 @@ type OscPacket interface {
 // pattern and zero or more arguments.
 type OscMessage struct {
 	Address   string
-	arguments []interface{}
+	Arguments []interface{}
 }
 
 // An OSC Bundle consists of the OSC-string "#bundle" followed by an OSC Time Tag,
@@ -210,18 +210,13 @@ func NewOscMessage(address string) (msg *OscMessage) {
 	return &OscMessage{Address: address}
 }
 
-// Arguments returns all arguments.
-func (msg *OscMessage) Arguments() []interface{} {
-	return msg.arguments
-}
-
 // Append appends the given argument to the arguments list.
-func (msg *OscMessage) Append(argument interface{}) (err error) {
+func (msg *OscMessage) Append(argument interface{}) error {
 	if argument == nil {
-		return err
+		return errors.New("Argument is null!")
 	}
 
-	msg.arguments = append(msg.arguments, argument)
+	msg.Arguments = append(msg.Arguments, argument)
 
 	return nil
 }
@@ -241,9 +236,24 @@ func (msg *OscMessage) Equals(b *OscMessage) bool {
 	}
 
 	// Check arguments
-	for i, arg := range msg.arguments {
-		if b.arguments[i] != arg {
-			return false
+	for i, arg := range msg.Arguments {
+		switch arg.(type) {
+		case bool, int32, int64, float32, float64, string:
+			if arg != b.Arguments[i] {
+				return false
+			}
+
+		case []byte:
+			ba := arg.([]byte)
+			bb := b.Arguments[i].([]byte)
+			if !bytes.Equal(ba, bb) {
+				return false
+			}
+
+		case OscTimetag:
+			if arg.(OscTimetag).TimeTag() != b.Arguments[i].(OscTimetag).TimeTag() {
+				return false
+			}
 		}
 	}
 
@@ -258,7 +268,7 @@ func (msg *OscMessage) Clear() {
 
 // ClearData removes all arguments from the OSC Message.
 func (msg *OscMessage) ClearData() {
-	msg.arguments = msg.arguments[len(msg.arguments):]
+	msg.Arguments = msg.Arguments[len(msg.Arguments):]
 }
 
 // Returns true, if the address of the OSC Message matches the given address.
@@ -275,7 +285,7 @@ func (msg *OscMessage) Match(address string) bool {
 
 // CountArguments returns the number of arguments.
 func (msg *OscMessage) CountArguments() int {
-	return len(msg.arguments)
+	return len(msg.Arguments)
 }
 
 // ToByteBuffer serializes the OSC message to a byte buffer. The byte buffer
@@ -298,7 +308,7 @@ func (msg *OscMessage) ToByteArray() (buffer []byte, err error) {
 
 	// Process the type tags and collect all arguments
 	var payload = new(bytes.Buffer)
-	for _, arg := range msg.arguments {
+	for _, arg := range msg.Arguments {
 		// FIXME: Use t instead of arg
 		switch t := arg.(type) {
 		default:
@@ -393,10 +403,10 @@ func (self *OscBundle) Append(pck OscPacket) (err error) {
 		return errors.New(fmt.Sprintf("Unsupported OSC packet type: only OscBundle and OscMessage are supported.", t))
 
 	case *OscBundle:
-		self.bundles = append(self.bundles, t)
+		self.Bundles = append(self.Bundles, t)
 
 	case *OscMessage:
-		self.messages = append(self.messages, t)
+		self.Messages = append(self.Messages, t)
 	}
 
 	return nil
@@ -562,7 +572,7 @@ func (self *OscServer) ListenAndServe() error {
 
 	self.running = true
 	var msg *OscBundle
-	for {
+	for self.running {
 		msg, err := self.readFromConnection(conn)
 		if err == nil {
 			// TODO: Every dispatch should happen in a new goroutine
@@ -570,7 +580,12 @@ func (self *OscServer) ListenAndServe() error {
 		}
 	}
 
-	panic("Unreachable - This should never happen.")
+	// Close connection
+	if err = conn.Close(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (self *OscServer) Close() {
@@ -864,7 +879,7 @@ func (self *OscTimetag) SetTime(time time.Time) {
 func readBlob(reader *bufio.Reader) (blob []byte, err error) {
 	var blobData = new(bytes.Buffer)
 
-	// TODO
+	// TODO: Implement readBlob() function
 
 	// First, get the length
 
