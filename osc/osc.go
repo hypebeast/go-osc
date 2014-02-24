@@ -89,8 +89,8 @@ type OscMessage struct {
 // point time tag. See http://opensoundcontrol.org/spec-1_0 for more information.
 type OscBundle struct {
 	Timetag  OscTimetag
-	messages []*OscMessage
-	bundles  []*OscBundle
+	Messages []*OscMessage
+	Bundles  []*OscBundle
 }
 
 // An OSC client. It sends OSC messages and bundles to the given IP address
@@ -208,6 +208,11 @@ func (self *OscDispatcher) Dispatch(bundle *OscBundle) {
 // NewMessage returns a new OscMessage. The address parameter is the OSC address.
 func NewOscMessage(address string) (msg *OscMessage) {
 	return &OscMessage{Address: address}
+}
+
+// Arguments returns all arguments.
+func (msg *OscMessage) Arguments() []interface{} {
+	return msg.arguments
 }
 
 // Append appends the given argument to the arguments list.
@@ -381,16 +386,6 @@ func NewOscBundle(time time.Time) (bundle *OscBundle) {
 	return &OscBundle{Timetag: *NewOscTimetag(time)}
 }
 
-// Messages returns all OSC messages.
-func (self *OscBundle) Messages() *[]OscMessages {
-	return self.messages
-}
-
-// Bundles returns all OSC bundles.
-func (self *OscBundle) Bundles() *[]OscBundle {
-	return self.bundles
-}
-
 // Append appends an OSC packet (OSC bundle or message) to the bundle.
 func (self *OscBundle) Append(pck OscPacket) (err error) {
 	switch t := pck.(type) {
@@ -407,7 +402,13 @@ func (self *OscBundle) Append(pck OscPacket) (err error) {
 	return nil
 }
 
-// ToByteArray serializes the OSC bundle to a byte array.
+// ToByteArray serializes the OSC bundle to a byte array with the following format:
+// 1. Bundle string: '#bundle'
+// 2. OSC timetag
+// 3. Length of first OSC bundle element
+// 4. First bundle element
+// 5. Length of x OSC bundle element
+// 6. x bundle element
 func (self *OscBundle) ToByteArray() (buffer []byte, err error) {
 	var data = new(bytes.Buffer)
 
@@ -423,7 +424,7 @@ func (self *OscBundle) ToByteArray() (buffer []byte, err error) {
 	}
 
 	// Process all OSC Messages
-	for _, m := range self.messages {
+	for _, m := range self.Messages {
 		var msgLen int
 		var msgBuf []byte
 
@@ -443,7 +444,7 @@ func (self *OscBundle) ToByteArray() (buffer []byte, err error) {
 	}
 
 	// Process all OSC Bundles
-	for _, b := range self.bundles {
+	for _, b := range self.Bundles {
 		var bLen int
 		var bBuf []byte
 
@@ -588,6 +589,7 @@ func (self *OscServer) AddMsgHandlerFunc(address string, handler func(pck OscPac
 // message is received an OSC Bundle will created and the message is appended to the
 // bundle.
 func (self *OscServer) readFromConnection(conn *net.UDPConn) (bundle *OscBundle, err error) {
+	// func (self *OscServer) readFromConnection(reader io.Reader) (bundle *OscBundle, err error) {
 	buf := make([]byte, 1024)
 
 	// Read the next UDP packet
