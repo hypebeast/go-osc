@@ -70,6 +70,7 @@ const (
 	// least signifigant bit is a special case meaning "immediately."
 	timeTagImmediate      = uint64(1)
 	secondsFrom1900To1970 = 2208988800
+	BundleTag             = "#bundle"
 )
 
 // OscPacket is the interface for OscMessage and OscBundle.
@@ -871,23 +872,34 @@ func (self *OscTimetag) SetTime(time time.Time) {
 }
 
 ////
-// Decoding functions
+// De/Encoding functions
 ////
 
 // readBlob reads an OSC Blob from the blob byte array. Padding bytes are removed
 // from the reader and not returned.
 func readBlob(reader *bufio.Reader) (blob []byte, err error) {
-	var blobData = new(bytes.Buffer)
-
-	// TODO: Implement readBlob() function
-
 	// First, get the length
+	var blobLen int32
+	if err = binary.Read(reader, binary.BigEndian, &blobLen); err != nil {
+		return nil, err
+	}
 
 	// Read the data
+	blob = make([]byte, blobLen)
+	if err = reader.Read(blob); err != nil {
+		return nil, err
+	}
 
 	// Remove the padding bytes
+	numPadBytes := padBytesNeeded(blobLen)
+	if numPadBytes > 0 {
+		dummy := make([]byte, numPadBytes)
+		if err = reader.Read(dummy); err != nil {
+			return nil, err
+		}
+	}
 
-	return blobData.Bytes(), nil
+	return blob, nil
 }
 
 // writeBlob writes the data byte array as an OSC blob into buff. If the length of
@@ -926,7 +938,8 @@ func readPaddedString(reader *bufio.Reader) (str string, err error) {
 		return "", err
 	}
 
-	// Remove the delimiter
+	// Remove the string delimiter, in order to calculate the right amount
+	// of padding bytes
 	str = str[:len(str)-1]
 
 	// Remove the padding bytes
