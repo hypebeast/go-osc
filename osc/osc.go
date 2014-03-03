@@ -39,13 +39,13 @@
  * 's' (string), 'b' (blob / binary data), 'h' (Int64), 't' (OSC timetag),
  * 'd' (Double), 'r' (RGBA color), 'T' (True), 'F' (False), 'N' (Nil).
  *
- * Supported OSC address patterns: TODO
+ * Supported OSC address patterns: TODO: Add the supported address patterns
  *
- * TODO: OscClient and OscServer
+ * TODO: Describe OscClient and OscServer
  *
  * Example usage:
  *
- * TODO
+ * TODO: add some example usages
  *
  * Author: Sebastian Ruml <sebastian.ruml@gmail.com>
  * Created: 2013.08.19
@@ -60,8 +60,8 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"io"
 	"net"
+	"strings"
 	"time"
 )
 
@@ -159,18 +159,23 @@ func NewOscDispatcher() (dispatcher *OscDispatcher) {
 }
 
 // AddMsgHandler adds a new message handler for the given OSC address.
-func (self *OscDispatcher) AddMsgHandler(address string, handler HandlerFunc) {
-	self.handlers[address] = handler
-}
+func (self *OscDispatcher) AddMsgHandler(address string, handler HandlerFunc) error {
+	for _, chr := range "*?,[]{}# " {
+		if strings.Contains(address, fmt.Sprintf("%c", chr)) {
+			return errors.New("OSC Address string may not contain any characters in \"*?,[]{}# \n")
+		}
+	}
 
-// AddMsgHandlerFunc adds a new message handler for the given OSC address and
-// handler function.
-func (self *OscDispatcher) AddMsgHandlerFunc(address string, handler func(msg *OscMessage)) {
-	self.AddMsgHandler(address, HandlerFunc(handler))
+	if existsAddress(address, self.handlers) {
+		return errors.New("OSC address exists already")
+	}
+
+	self.handlers[address] = handler
+
+	return nil
 }
 
 // Dispatch dispatches OSC packets. Implements the Dispatcher interface.
-// TODO: Rework this method.
 func (self *OscDispatcher) Dispatch(packet OscPacket) {
 	switch packet.(type) {
 	default:
@@ -569,8 +574,7 @@ func (self *OscServer) ListenAndServe() error {
 	for self.running {
 		msg, err := self.readFromConnection(conn)
 		if err == nil {
-			// TODO: Every dispatch should happen in a new goroutine
-			self.dispatcher.Dispatch(msg)
+			go self.dispatcher.Dispatch(msg)
 		}
 	}
 
@@ -586,12 +590,8 @@ func (self *OscServer) Close() {
 	self.running = false
 }
 
-func (self *OscServer) AddMsgHandler(address string, handler HandlerFunc) {
-	self.dispatcher.AddMsgHandler(address, handler)
-}
-
-func (self *OscServer) AddMsgHandlerFunc(address string, handler func(msg *OscMessage)) {
-	self.dispatcher.AddMsgHandlerFunc(address, handler)
+func (self *OscServer) AddMsgHandler(address string, handler HandlerFunc) error {
+	return self.dispatcher.AddMsgHandler(address, handler)
 }
 
 // readFromConnection retrieves OSC packets from the given io.Reader. If an OSC
@@ -991,9 +991,20 @@ func timetagToTime(timetag uint64) (t time.Time) {
 }
 
 ////
-// Functions for pretty printing an OSC packet
+// Utility functions
 ////
 
-func PrintOscPacket(writer io.Writer, pck OscPacket) {
-	// TODO
+// PrintOscMessages prints a OscMessage.
+func PrintOscMessage(msg OscMessage) {
+	// TODO: Implement PrintOscMessage
+}
+
+func existsAddress(s string, handlers map[string]Handler) bool {
+	for address, _ := range handlers {
+		if address == s {
+			return true
+		}
+	}
+
+	return false
 }
