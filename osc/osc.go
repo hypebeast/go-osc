@@ -61,6 +61,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -274,13 +275,13 @@ func (msg *OscMessage) ClearData() {
 // Returns true, if the address of the OSC Message matches the given address.
 // Case sensitive!
 func (msg *OscMessage) Match(address string) bool {
-	// TODO: Implement the pattern matching!
+	exp := getRegEx(msg.Address)
 
-	if msg.Address == address {
+	if exp.MatchString(address) {
 		return true
 	}
 
-	return true
+	return false
 }
 
 // CountArguments returns the number of arguments.
@@ -991,7 +992,7 @@ func timetagToTime(timetag uint64) (t time.Time) {
 }
 
 ////
-// Utility functions
+// Utility and various functions
 ////
 
 // PrintOscMessages prints a OscMessage.
@@ -999,6 +1000,7 @@ func PrintOscMessage(msg OscMessage) {
 	// TODO: Implement PrintOscMessage
 }
 
+// existsAddress returns true if the address s is found in handlers. Otherwise, false.
 func existsAddress(s string, handlers map[string]Handler) bool {
 	for address, _ := range handlers {
 		if address == s {
@@ -1007,4 +1009,19 @@ func existsAddress(s string, handlers map[string]Handler) bool {
 	}
 
 	return false
+}
+
+// getRegEx compiles and returns a regular expression object for the given address
+// pattern.
+func getRegEx(pattern string) *regexp.Regexp {
+	pattern = strings.Replace(pattern, ".", "\\.", -1) // Escape all '.' in the pattern
+	pattern = strings.Replace(pattern, "(", "\\(", -1) // Escape all '(' in the pattern
+	pattern = strings.Replace(pattern, ")", "\\)", -1) // Escape all ')' in the pattern
+	pattern = strings.Replace(pattern, "*", ".*", -1)  // Replace a '*' with '.*' that matches zero or more characters
+	pattern = strings.Replace(pattern, "{", "(", -1)   // Change a '{' to '('
+	pattern = strings.Replace(pattern, ",", "|", -1)   // Change a ',' to '|'
+	pattern = strings.Replace(pattern, "}", ")", -1)   // Change a '}' to ')'
+	pattern = strings.Replace(pattern, "?", ".", -1)   // Change a '?' to '.'
+
+	return regexp.MustCompile(pattern)
 }

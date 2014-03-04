@@ -18,13 +18,9 @@ func main() {
 	client := osc.NewOscClient(ip, port)
 	// Create OSC message
 	msg := osc.NewOscMessage("/test/address")
-	// Append a new int32 argument
 	msg.Append(int32(111))
-	// Append True
-	// msg.Append(true)
-	// Append a string value
-	// msg.Append("hello")
-	// Send the message
+	msg.Append(true)
+	msg.Append("hello")
 	client.Send(msg)
 
 	fmt.Println("Sending an OSC bundle with two embedded OSC messages...")
@@ -33,13 +29,20 @@ func main() {
 	bundle := osc.NewOscBundle(time.Now())
 	msg = osc.NewOscMessage("/test/bundle1")
 	msg.Append(int32(222))
-	// msg2.Append(true)
+	msg.Append(true)
 	bundle.Append(msg)
 
 	msg = osc.NewOscMessage("/test/bundle2")
 	msg.Append(int32(333))
-	// msg2.Append(false)
+	msg.Append(false)
 	bundle.Append(msg)
-
 	client.Send(bundle)
+
+	msg = osc.NewOscMessage("/pattern?/matching")
+	msg.Append(true)
+	client.Send(msg)
+
+	msg = osc.NewOscMessage("/pattern/matching2/*")
+	msg.Append(true)
+	client.Send(msg)
 }
