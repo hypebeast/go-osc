@@ -191,21 +191,29 @@ func (self *OscDispatcher) Dispatch(packet OscPacket) {
 		}
 
 	case *OscBundle:
-		// TODO: Wait with the dispatching until the time of the time tag is reached
 		bundle, _ := packet.(*OscBundle)
-		for _, message := range bundle.Messages {
-			for address, handler := range self.handlers {
-				if message.Match(address) {
-					handler.HandleMessage(message)
+		timer := time.NewTimer(bundle.Timetag.ExpiresIn())
+
+		go func() {
+			<-timer.C
+			for _, message := range bundle.Messages {
+				for address, handler := range self.handlers {
+					if message.Match(address) {
+						handler.HandleMessage(message)
+					}
 				}
 			}
-		}
 
-		// Process bundles
-		for _, b := range bundle.Bundles {
-			self.Dispatch(b)
-		}
+			// Process bundles
+			for _, b := range bundle.Bundles {
+				self.Dispatch(b)
+			}
+		}()
 	}
+}
+
+func (self *OscDispatcher) processDispatching(b chan *OscBundle) {
+
 }
 
 ////
@@ -850,6 +858,24 @@ func (self *OscTimetag) ToByteArray() []byte {
 func (self *OscTimetag) SetTime(time time.Time) {
 	self.time = time
 	self.timeTag = timeToTimetag(time)
+}
+
+// ExpiresIn calculates the number of seconds until the current time is the
+// same as the value of the timetag. It returns zero if the value of the
+// timetag is in the past.
+func (self *OscTimetag) ExpiresIn() time.Duration {
+	if self.timeTag <= 1 {
+		return 0
+	}
+
+	tt := timetagToTime(self.timeTag)
+	seconds := tt.Sub(time.Now())
+
+	if seconds <= 0 {
+		return 0
+	}
+
+	return seconds
 }
 
 ////

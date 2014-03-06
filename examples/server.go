@@ -15,6 +15,18 @@ func main() {
 		fmt.Println("Received message from " + msg.Address)
 	})
 
+	server.AddMsgHandler("/test/bundle1", func(msg *osc.OscMessage) {
+		fmt.Println("Received message from " + msg.Address)
+	})
+
+	server.AddMsgHandler("/test/bundle2", func(msg *osc.OscMessage) {
+		fmt.Println("Received message from " + msg.Address)
+	})
+
+	server.AddMsgHandler("/test/bundle3", func(msg *osc.OscMessage) {
+		fmt.Println("Received message from " + msg.Address)
+	})
+
 	server.AddMsgHandler("/pattern1/matching", func(msg *osc.OscMessage) {
 		fmt.Printf("Received message from '%s' matched '%s'\n", msg.Address, "/pattern1/matching")
 	})
