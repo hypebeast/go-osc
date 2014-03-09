@@ -212,10 +212,6 @@ func (self *OscDispatcher) Dispatch(packet OscPacket) {
 	}
 }
 
-func (self *OscDispatcher) processDispatching(b chan *OscBundle) {
-
-}
-
 ////
 // OscMessage
 ////
