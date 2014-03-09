@@ -399,14 +399,14 @@ func NewOscClient(ip string, port int) (client *OscClient) {
 }
 
 // SendBundle sends an OSC Bundle or an OSC Message.
-func (client *OscClient) Send(bundle *OscPacket) (err error) {
+func (client *OscClient) Send(bundle OscPacket) (err error) {
 	addr, _ := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", client.ipaddress, client.port))
 	conn, err := net.DialUDP("udp", nil, addr)
 	if err != nil {
 		return err
 	}
 
-	data, err := (*bundle).ToByteArray()
+	data, err := (bundle).ToByteArray()
 	if err != nil {
 		return nil
 	}
