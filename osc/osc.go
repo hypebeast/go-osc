@@ -39,7 +39,8 @@
  * 's' (string), 'b' (blob / binary data), 'h' (Int64), 't' (OSC timetag),
  * 'd' (Double), 'r' (RGBA color), 'T' (True), 'F' (False), 'N' (Nil).
  *
- * Supported OSC address patterns: TODO: Add the supported address patterns
+ * Supported OSC address patterns:
+ * TODO: Add the supported address patterns
  *
  * TODO: Describe OscClient and OscServer
  *
@@ -286,6 +287,20 @@ func (msg *OscMessage) Match(address string) bool {
 	}
 
 	return false
+}
+
+// TypeTags returns the type tag string.
+func (msg *OscMessage) TypeTags() (tags string, err error) {
+	tags = ","
+	for _, m := range msg.Arguments {
+		s, err := getTypeTag(m)
+		if err != nil {
+			return "", err
+		}
+		tags += s
+	}
+
+	return tags, nil
 }
 
 // CountArguments returns the number of arguments.
@@ -554,6 +569,7 @@ func NewOscServer(address string, port int) (server *OscServer) {
 
 // ListenAndServe retrieves incoming OSC packets.
 // TODO: Add support for server running in a goroutine
+// TODO: Add support for returning raw OscMessages and OscBundles
 func (self *OscServer) ListenAndServe() error {
 	if self.dispatcher == nil {
 		return errors.New("No dispatcher definied")
@@ -1017,9 +1033,40 @@ func timetagToTime(timetag uint64) (t time.Time) {
 // Utility and various functions
 ////
 
-// PrintOscMessages prints a OscMessage.
-func PrintOscMessage(msg OscMessage) {
-	// TODO: Implement PrintOscMessage
+// PrintOscMessages pretty print an OscMessage.
+func PrintOscMessage(msg *OscMessage) {
+	tags, err := msg.TypeTags()
+	if err != nil {
+		return
+	}
+
+	var formatString string
+	var arguments []interface{}
+	formatString += "%s %s"
+	arguments = append(arguments, msg.Address)
+	arguments = append(arguments, tags)
+
+	for _, arg := range msg.Arguments {
+		switch arg.(type) {
+		case bool, int32, int64, float32, float64, string:
+			formatString += " %v"
+			arguments = append(arguments, arg)
+
+		case nil:
+			formatString += " %s"
+			arguments = append(arguments, "Nil")
+
+		case []byte:
+			formatString += " %s"
+			arguments = append(arguments, "blob")
+
+		case OscTimetag:
+			formatString += " %d"
+			timeTag := arg.(OscTimetag)
+			arguments = append(arguments, timeTag.TimeTag())
+		}
+	}
+	fmt.Println(fmt.Sprintf(formatString, arguments...))
 }
 
 // existsAddress returns true if the address s is found in handlers. Otherwise, false.
@@ -1046,4 +1093,44 @@ func getRegEx(pattern string) *regexp.Regexp {
 	pattern = strings.Replace(pattern, "?", ".", -1)   // Change a '?' to '.'
 
 	return regexp.MustCompile(pattern)
+}
+
+// getTypeTag returns the OSC type tag for the given argument.
+func getTypeTag(arg interface{}) (s string, err error) {
+	switch t := arg.(type) {
+	default:
+		return "", errors.New(fmt.Sprintf("Unsupported type: %T", t))
+
+	case bool:
+		if arg.(bool) {
+			s = "T"
+		} else {
+			s = "F"
+		}
+
+	case nil:
+		s = "N"
+
+	case int32:
+		s = "i"
+
+	case float32:
+		s = "f"
+
+	case string:
+		s = "s"
+
+	case []byte:
+		s = "b"
+
+	case int64:
+		s = "h"
+
+	case float64:
+		s = "d"
+
+	case OscTimetag:
+		s = "t"
+	}
+	return s, nil
 }

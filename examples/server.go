@@ -13,34 +13,42 @@ func main() {
 
 	server.AddMsgHandler("/test/address", func(msg *osc.OscMessage) {
 		fmt.Println("Received message from " + msg.Address)
+		osc.PrintOscMessage(msg)
 	})
 
 	server.AddMsgHandler("/test/bundle1", func(msg *osc.OscMessage) {
 		fmt.Println("Received message from " + msg.Address)
+		osc.PrintOscMessage(msg)
 	})
 
 	server.AddMsgHandler("/test/bundle2", func(msg *osc.OscMessage) {
 		fmt.Println("Received message from " + msg.Address)
+		osc.PrintOscMessage(msg)
 	})
 
 	server.AddMsgHandler("/test/bundle3", func(msg *osc.OscMessage) {
 		fmt.Println("Received message from " + msg.Address)
+		osc.PrintOscMessage(msg)
 	})
 
 	server.AddMsgHandler("/pattern1/matching", func(msg *osc.OscMessage) {
 		fmt.Printf("Received message from '%s' matched '%s'\n", msg.Address, "/pattern1/matching")
+		osc.PrintOscMessage(msg)
 	})
 
 	server.AddMsgHandler("/patternx/matching", func(msg *osc.OscMessage) {
 		fmt.Printf("Received message from '%s' matched '%s'\n", msg.Address, "/patternx/matching")
+		osc.PrintOscMessage(msg)
 	})
 
 	server.AddMsgHandler("/pattern/matching2/cat", func(msg *osc.OscMessage) {
 		fmt.Printf("Received message from '%s' matched '%s'\n", msg.Address, "/pattern/matching2/cat")
+		osc.PrintOscMessage(msg)
 	})
 
 	server.AddMsgHandler("/pattern/matching2/dog", func(msg *osc.OscMessage) {
 		fmt.Printf("Received message from '%s' matched '%s'\n", msg.Address, "/pattern/matching2/dog")
+		osc.PrintOscMessage(msg)
 	})
 
 	fmt.Printf("Listening on %s:%d\n", address, port)
