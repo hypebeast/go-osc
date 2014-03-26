@@ -1,4 +1,4 @@
-package osc_server
+package main
 
 import (
 	"fmt"
@@ -52,7 +52,7 @@ func main() {
 	})
 
 	fmt.Printf("Listening on %s:%d\n", address, port)
-	err := server.ListenAndServe()
+	err := server.ListenAndDispatch()
 	if err != nil {
 		fmt.Println("Error")
 	}

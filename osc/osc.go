@@ -9,6 +9,14 @@
  * protocol developed for communication among computers, sound synthesizers,
  * and other multimedia devices.
  *
+ * Fetaures:
+ *  - Supports OSC messages with 'i' (Int32), 'f' (Float32),
+ *    's' (string), 'b' (blob / binary data), 'h' (Int64), 't' (OSC timetag),
+ *     'd' (Double/int64), 'T' (True), 'F' (False), 'N' (Nil) types.
+ *  - OSC bundles, including timetags
+ *  - Support for OSC address pattern including '*', '?', '{,}' and '[]' wildcards
+ *  - TODO: Describe registering methods
+ *
  * This OSC implementation uses the UDP protocol for sending and receiving
  * OSC packets.
  *
@@ -37,16 +45,38 @@
  *
  * The following argument types are supported: 'i' (Int32), 'f' (Float32),
  * 's' (string), 'b' (blob / binary data), 'h' (Int64), 't' (OSC timetag),
- * 'd' (Double), 'r' (RGBA color), 'T' (True), 'F' (False), 'N' (Nil).
+ * 'd' (Double/int64), 'T' (True), 'F' (False), 'N' (Nil).
  *
- * Supported OSC address patterns:
- * TODO: Add the supported address patterns
+ * go-osc supports the following OSC address patterns:
+ *  - '*', '?', '{,}' and '[]' wildcards.
  *
- * TODO: Describe OscClient and OscServer
  *
- * Example usage:
+ * Usage:
  *
- * TODO: add some example usages
+ * OSC client example:
+ *
+ * ip := "localhost"
+ * port := 8765
+ *
+ * client := osc.NewOscClient(ip, port)
+ * msg := osc.NewOscMessage("/osc/address")
+ * msg.Append(int32(111))
+ * msg.Append(true)
+ * msg.Append("hello")
+ * client.Send(msg)
+ *
+ * OSC server example:
+ *
+ * address := "127.0.0.1"
+ * port := 8765
+ * server := osc.NewOscServer(address, port)
+ *
+ * server.AddMsgHandler("/osc/address", func(msg *osc.OscMessage) {
+ *   osc.PrintOscMessage(msg)
+ * })
+ *
+ * server.ListenAndServe()
+ *
  *
  * Author: Sebastian Ruml <sebastian.ruml@gmail.com>
  * Created: 2013.08.19
@@ -111,6 +141,7 @@ type OscServer struct {
 	ReadTimeout time.Duration  // Read Timeout
 	dispatcher  *OscDispatcher // Dispatcher that dispatches OSC packets/messages
 	running     bool
+	conn        *net.UDPConn
 }
 
 // OscTimetag represents an OSC Time Tag.
@@ -205,7 +236,7 @@ func (self *OscDispatcher) Dispatch(packet OscPacket) {
 				}
 			}
 
-			// Process bundles
+			// Process all bundles
 			for _, b := range bundle.Bundles {
 				self.Dispatch(b)
 			}
@@ -564,15 +595,62 @@ func NewOscServer(address string, port int) (server *OscServer) {
 		Port:        port,
 		dispatcher:  NewOscDispatcher(),
 		ReadTimeout: 0,
-		running:     true}
+		running:     false}
 }
 
-// ListenAndServe retrieves incoming OSC packets.
-// TODO: Add support for server running in a goroutine
-// TODO: Add support for returning raw OscMessages and OscBundles
-func (self *OscServer) ListenAndServe() error {
+// Close stops the OSC server and closes the connection.
+func (self *OscServer) Close() error {
+	self.running = false
+	return self.conn.Close()
+}
+
+// AddMsgHandler registers a new message handler function for an OSC address. The handler
+// is the function called for incoming OscMessages that match 'address'.
+func (self *OscServer) AddMsgHandler(address string, handler HandlerFunc) error {
+	return self.dispatcher.AddMsgHandler(address, handler)
+}
+
+// ListenAndServe retrieves incoming OSC packets and dispatches the retrieved
+// OSC packets.
+func (self *OscServer) ListenAndDispatch() error {
+	if self.running {
+		return errors.New("Server is already running")
+	}
+
 	if self.dispatcher == nil {
 		return errors.New("No dispatcher definied")
+	}
+
+	service := fmt.Sprintf("%s:%d", self.Address, self.Port)
+	udpAddr, err := net.ResolveUDPAddr("udp", service)
+	if err != nil {
+		return err
+	}
+
+	self.conn, err = net.ListenUDP("udp", udpAddr)
+	if err != nil {
+		return err
+	}
+
+	// Set read timeout
+	if self.ReadTimeout != 0 {
+		self.conn.SetReadDeadline(time.Now().Add(self.ReadTimeout))
+	}
+
+	self.running = true
+	for self.running {
+		msg, err := self.readFromConnection()
+		if err == nil {
+			go self.dispatcher.Dispatch(msg)
+		}
+	}
+
+	return nil
+}
+
+func (self *OscServer) Listen() error {
+	if self.running {
+		return errors.New("Server is already running")
 	}
 
 	service := fmt.Sprintf("%s:%d", self.Address, self.Port)
@@ -591,37 +669,27 @@ func (self *OscServer) ListenAndServe() error {
 		conn.SetReadDeadline(time.Now().Add(self.ReadTimeout))
 	}
 
+	self.conn = conn
 	self.running = true
-	for self.running {
-		msg, err := self.readFromConnection(conn)
-		if err == nil {
-			go self.dispatcher.Dispatch(msg)
-		}
-	}
-
-	// Close connection
-	if err = conn.Close(); err != nil {
-		return err
-	}
 
 	return nil
 }
 
-func (self *OscServer) Close() {
-	self.running = false
+// Listen listens for incoming OSC packets and returns the packet if one is received.
+func (self *OscServer) ReceivePacket() (packet OscPacket, err error) {
+	msg, err := self.readFromConnection()
+	if err == nil {
+		return msg, nil
+	}
+
+	return nil, err
 }
 
-func (self *OscServer) AddMsgHandler(address string, handler HandlerFunc) error {
-	return self.dispatcher.AddMsgHandler(address, handler)
-}
-
-// readFromConnection retrieves OSC packets from the given io.Reader. If an OSC
-// message is received an OSC Bundle will created and the message is appended to the
-// bundle.
-func (self *OscServer) readFromConnection(conn *net.UDPConn) (packet OscPacket, err error) {
+// readFromConnection retrieves OSC packets.
+func (self *OscServer) readFromConnection() (packet OscPacket, err error) {
 	data := make([]byte, 65535)
 	var n, start int
-	n, _, err = conn.ReadFromUDP(data)
+	n, _, err = self.conn.ReadFromUDP(data)
 	packet, err = self.readPacket(bufio.NewReader(bytes.NewBuffer(data)), &start, n)
 
 	return packet, nil
@@ -651,7 +719,7 @@ func (self *OscServer) readPacket(reader *bufio.Reader, start *int, end int) (pa
 	return packet, nil
 }
 
-// readBundle reads a OscBundle from reader.
+// readBundle reads an OscBundle from reader.
 func (self *OscServer) readBundle(reader *bufio.Reader, start *int, end int) (bundle *OscBundle, err error) {
 	// Read the '#bundle' OSC string
 	var startTag string
@@ -1030,10 +1098,10 @@ func timetagToTime(timetag uint64) (t time.Time) {
 }
 
 ////
-// Utility and various functions
+// Utility and helper functions
 ////
 
-// PrintOscMessages pretty print an OscMessage.
+// PrintOscMessages pretty print an OscMessage to the standard output.
 func PrintOscMessage(msg *OscMessage) {
 	tags, err := msg.TypeTags()
 	if err != nil {

@@ -1,4 +1,4 @@
-package osc_client
+package main
 
 import (
 	"fmt"
@@ -12,7 +12,6 @@ func main() {
 	port := 8765
 
 	fmt.Println(fmt.Sprintf("Creating OSC Client - IP: %s, Port: %d", ip, port))
-
 	fmt.Println("Sending an OSC Message with some arguments...")
 
 	client := osc.NewOscClient(ip, port)
