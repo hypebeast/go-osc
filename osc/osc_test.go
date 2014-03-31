@@ -1,6 +1,8 @@
 package osc
 
 import (
+	"bufio"
+	"bytes"
 	"sync"
 	"testing"
 	"time"
@@ -138,6 +140,39 @@ func TestServerMessageReceiving(t *testing.T) {
 }
 
 func TestReadPaddedString(t *testing.T) {
+	buf1 := []byte{'t', 'e', 's', 't', 's', 't', 'r', 'i', 'n', 'g', 0, 0}
+	buf2 := []byte{'t', 'e', 's', 't', 0, 0, 0, 0}
+
+	bytesBuffer := bytes.NewBuffer(buf1)
+	st, n, err := readPaddedString(bufio.NewReader(bytesBuffer))
+	if err != nil {
+		t.Error("Error reading padded string: " + err.Error())
+	}
+
+	if n != 12 {
+		t.Errorf("Number of bytes needs to be 12 and is: %d\n", n)
+	}
+
+	if st != "teststring" {
+		t.Errorf("String should be \"teststring\" and is \"%s\"", st)
+	}
+
+	bytesBuffer = bytes.NewBuffer(buf2)
+	st, n, err = readPaddedString(bufio.NewReader(bytesBuffer))
+	if err != nil {
+		t.Error("Error reading padded string: " + err.Error())
+	}
+
+	if n != 8 {
+		t.Errorf("Number of bytes needs to be 8 and is: %d\n", n)
+	}
+
+	if st != "test" {
+		t.Errorf("String should be \"test\" and is \"%s\"", st)
+	}
+}
+
+func TestWritePaddedString(t *testing.T) {
 
 }
 
@@ -171,6 +206,11 @@ func TestPadBytesNeeded(t *testing.T) {
 	n = padBytesNeeded(63)
 	if n != 1 {
 		t.Errorf("Number of pad bytes should be 1 and is: %d", n)
+	}
+
+	n = padBytesNeeded(10)
+	if n != 2 {
+		t.Errorf("Number of pad bytes should be 2 and is: %d", n)
 	}
 }
 

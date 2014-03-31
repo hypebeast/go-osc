@@ -1035,7 +1035,7 @@ func readPaddedString(reader *bufio.Reader) (str string, n int, err error) {
 	// Remove the padding bytes
 	padLen := padBytesNeeded(len(str)) - 1
 	if padLen > 0 {
-		n += padLen + 1
+		n += padLen
 		padBytes := make([]byte, padLen)
 		if _, err = reader.Read(padBytes); err != nil {
 			return "", 0, err
