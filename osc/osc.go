@@ -140,8 +140,8 @@ type OscServer struct {
 	Port        int            // Port to listen on
 	ReadTimeout time.Duration  // Read Timeout
 	dispatcher  *OscDispatcher // Dispatcher that dispatches OSC packets/messages
-	running     bool
-	conn        *net.UDPConn
+	running     bool           // Flag to store if the server is running or not
+	conn        *net.UDPConn   // UDP connection object
 }
 
 // OscTimetag represents an OSC Time Tag.

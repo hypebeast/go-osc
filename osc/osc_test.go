@@ -8,11 +8,33 @@ import (
 	"time"
 )
 
-func TestAddMsgHandlerWithInvalidAddress(t *testing.T) {
-	server := NewOscServer("localhost", 6677)
-	err := server.AddMsgHandler("/address*/test", func(msg *OscMessage) {})
-	if err == nil {
-		t.Error("Expected error with '/address*/test'")
+func TestAppendArguments(t *testing.T) {
+	oscAddress := "/address"
+	message := NewOscMessage(oscAddress)
+	if message.Address != oscAddress {
+		t.Errorf("OSC address should be \"%s\" and is \"%s\"", oscAddress, message.Address)
+	}
+
+	message.Append("string argument")
+	message.Append(123456789)
+	message.Append(true)
+
+	if message.CountArguments() != 3 {
+		t.Errorf("Number of arguments should be %d and is %d", 3, message.CountArguments())
+	}
+}
+
+func TestEqualMessage(t *testing.T) {
+	msg1 := NewOscMessage("/address")
+	msg2 := NewOscMessage("/address")
+
+	msg1.Append(1234)
+	msg2.Append(1234)
+	msg1.Append("test string")
+	msg2.Append("test string")
+
+	if !msg1.Equals(msg2) {
+		t.Error("Messages should be equal")
 	}
 }
 
@@ -21,6 +43,14 @@ func TestAddMsgHandler(t *testing.T) {
 	err := server.AddMsgHandler("/address/test", func(msg *OscMessage) {})
 	if err != nil {
 		t.Error("Expected that OSC address '/address/test' is valid")
+	}
+}
+
+func TestAddMsgHandlerWithInvalidAddress(t *testing.T) {
+	server := NewOscServer("localhost", 6677)
+	err := server.AddMsgHandler("/address*/test", func(msg *OscMessage) {})
+	if err == nil {
+		t.Error("Expected error with '/address*/test'")
 	}
 }
 
@@ -173,7 +203,19 @@ func TestReadPaddedString(t *testing.T) {
 }
 
 func TestWritePaddedString(t *testing.T) {
+	buf := []byte{}
+	bytesBuffer := bytes.NewBuffer(buf)
+	testString := "testString"
+	expectedNumberOfWrittenBytes := len(testString) + padBytesNeeded(len(testString))
 
+	n, err := writePaddedString(testString, bytesBuffer)
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+
+	if n != expectedNumberOfWrittenBytes {
+		t.Errorf("Expected number of written bytes should be \"%d\" and is \"%d\"", expectedNumberOfWrittenBytes, n)
+	}
 }
 
 func TestPadBytesNeeded(t *testing.T) {
