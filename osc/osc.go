@@ -447,7 +447,7 @@ func NewOscBundle(time time.Time) (bundle *OscBundle) {
 	return &OscBundle{Timetag: *NewOscTimetag(time)}
 }
 
-// Append appends an OSC packet (OSC bundle or message) to the bundle.
+// Append appends an OSC bundle or OSC message to the bundle.
 func (self *OscBundle) Append(pck OscPacket) (err error) {
 	switch t := pck.(type) {
 	default:
@@ -468,8 +468,8 @@ func (self *OscBundle) Append(pck OscPacket) (err error) {
 // 2. OSC timetag
 // 3. Length of first OSC bundle element
 // 4. First bundle element
-// 5. Length of x OSC bundle element
-// 6. x bundle element
+// 5. Length of n OSC bundle element
+// 6. n bundle element
 func (self *OscBundle) ToByteArray() (buffer []byte, err error) {
 	var data = new(bytes.Buffer)
 

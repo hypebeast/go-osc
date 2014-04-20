@@ -1,8 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"github.com/hypebeast/go-osc/osc"
+	"io"
+	"os"
+	"strings"
 	"time"
 )
 
@@ -10,45 +14,56 @@ import (
 func main() {
 	ip := "localhost"
 	port := 8765
-
-	fmt.Println(fmt.Sprintf("Creating OSC Client - IP: %s, Port: %d", ip, port))
-	fmt.Println("Sending an OSC Message with some arguments...")
-
 	client := osc.NewOscClient(ip, port)
-	// Create OSC message
-	msg := osc.NewOscMessage("/test/address")
-	msg.Append(int32(111))
-	msg.Append(true)
-	msg.Append("hello")
-	client.Send(msg)
 
-	fmt.Println("Sending an OSC bundle with two embedded OSC messages...")
+	fmt.Println("### Welcome to go-osc transmitter demo")
+	fmt.Println("Please, select the OSC packet type you would like to send:")
+	fmt.Println("\tm: OSCMessage")
+	fmt.Println("\tb: OSCBundle")
+	fmt.Println("\tPress \"q\" to exit")
+	fmt.Printf("# ")
 
-	// Create an OSC bundle and add two OSC messages to it
-	bundle := osc.NewOscBundle(time.Now().Add(time.Duration(5) * time.Second))
-	msg = osc.NewOscMessage("/test/bundle1")
-	msg.Append(int32(222))
-	msg.Append(true)
-	bundle.Append(msg)
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		line, err := reader.ReadBytes('\n')
+		if err == io.EOF {
+			break
+		}
 
-	msg = osc.NewOscMessage("/test/bundle2")
-	msg.Append(int32(333))
-	msg.Append(false)
-	bundle.Append(msg)
-	client.Send(bundle)
+		if err != nil {
+			fmt.Println("Error: " + err.Error())
+			os.Exit(1)
+		}
 
-	bundle = osc.NewOscBundle(time.Now().Add(time.Duration(7) * time.Second))
-	msg = osc.NewOscMessage("/test/bundle3")
-	msg.Append(int32(222))
-	msg.Append(true)
-	bundle.Append(msg)
-	client.Send(bundle)
+		sline := strings.TrimRight(string(line), "\n")
+		if sline == "m" {
+			message := osc.NewOscMessage("/message/address")
+			message.Append(int32(12345))
+			message.Append("teststring")
+			message.Append(true)
+			message.Append(false)
+			client.Send(message)
+		} else if sline == "b" {
+			bundle := osc.NewOscBundle(time.Now())
+			message1 := osc.NewOscMessage("/bundle/message/1")
+			message1.Append(int32(12345))
+			message1.Append("teststring")
+			message1.Append(true)
+			message1.Append(false)
+			message2 := osc.NewOscMessage("/bundle/message/2")
+			message2.Append(int32(3344))
+			message2.Append(float32(101.9))
+			message2.Append("string1")
+			message2.Append("string2")
+			message2.Append(true)
+			bundle.Append(message1)
+			bundle.Append(message2)
+			client.Send(bundle)
+		} else if sline == "q" {
+			fmt.Println("Exit!")
+			os.Exit(0)
+		}
 
-	msg = osc.NewOscMessage("/pattern?/matching")
-	msg.Append(true)
-	client.Send(msg)
-
-	msg = osc.NewOscMessage("/pattern/matching2/*")
-	msg.Append(true)
-	client.Send(msg)
+		fmt.Printf("# ")
+	}
 }

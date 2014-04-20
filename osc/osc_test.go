@@ -131,12 +131,16 @@ func TestServerMessageReceiving(t *testing.T) {
 
 			if packet != nil {
 				msg := packet.(*OscMessage)
-				if len(msg.Arguments) != 1 {
-					t.Error("Argument length should be 1 and is: " + string(len(msg.Arguments)))
+				if msg.CountArguments() != 2 {
+					t.Errorf("Argument length should be 2 and is: %d\n", msg.CountArguments())
 				}
 
 				if msg.Arguments[0].(int32) != 1122 {
 					t.Error("Argument should be 1122 and is: " + string(msg.Arguments[0].(int32)))
+				}
+
+				if msg.Arguments[1].(int32) != 3344 {
+					t.Error("Argument should be 3344 and is: " + string(msg.Arguments[1].(int32)))
 				}
 
 				server.Close()
@@ -153,6 +157,7 @@ func TestServerMessageReceiving(t *testing.T) {
 			client := NewOscClient("localhost", 6677)
 			msg := NewOscMessage("/address/test")
 			msg.Append(int32(1122))
+			msg.Append(int32(3344))
 			time.Sleep(500 * time.Millisecond)
 			client.Send(msg)
 		}

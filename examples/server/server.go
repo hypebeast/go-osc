@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"github.com/hypebeast/go-osc/osc"
+	"os"
 )
 
 // TODO: Revise the server
@@ -11,49 +13,54 @@ func main() {
 	port := 8765
 	server := osc.NewOscServer(address, port)
 
-	server.AddMsgHandler("/test/address", func(msg *osc.OscMessage) {
-		fmt.Println("Received message from " + msg.Address)
-		osc.PrintOscMessage(msg)
-	})
+	fmt.Println("### Welcome to go-osc receiver demo")
+	fmt.Println("Press \"q\" to exit")
 
-	server.AddMsgHandler("/test/bundle1", func(msg *osc.OscMessage) {
-		fmt.Println("Received message from " + msg.Address)
-		osc.PrintOscMessage(msg)
-	})
+	go func() {
+		fmt.Printf("Start listening on \"%s:%d\"\n", address, port)
+		server.Listen()
 
-	server.AddMsgHandler("/test/bundle2", func(msg *osc.OscMessage) {
-		fmt.Println("Received message from " + msg.Address)
-		osc.PrintOscMessage(msg)
-	})
+		for {
+			packet, err := server.ReceivePacket()
+			if err != nil {
+				fmt.Println("Server error: " + err.Error())
+				server.Close()
+				os.Exit(1)
+			}
 
-	server.AddMsgHandler("/test/bundle3", func(msg *osc.OscMessage) {
-		fmt.Println("Received message from " + msg.Address)
-		osc.PrintOscMessage(msg)
-	})
+			if packet != nil {
+				switch packet.(type) {
+				default:
+					fmt.Println("Unknow packet type!")
 
-	server.AddMsgHandler("/pattern1/matching", func(msg *osc.OscMessage) {
-		fmt.Printf("Received message from '%s' matched '%s'\n", msg.Address, "/pattern1/matching")
-		osc.PrintOscMessage(msg)
-	})
+				case *osc.OscMessage:
+					fmt.Printf("-- OSC Message: ")
+					osc.PrintOscMessage(packet.(*osc.OscMessage))
 
-	server.AddMsgHandler("/patternx/matching", func(msg *osc.OscMessage) {
-		fmt.Printf("Received message from '%s' matched '%s'\n", msg.Address, "/patternx/matching")
-		osc.PrintOscMessage(msg)
-	})
+				case *osc.OscBundle:
+					fmt.Println("-- OSC Bundle:")
+					bundle := packet.(*osc.OscBundle)
+					for i, message := range bundle.Messages {
+						fmt.Printf("  -- OSC Message #%d: ", i+1)
+						osc.PrintOscMessage(message)
+					}
+				}
+			}
+		}
+	}()
 
-	server.AddMsgHandler("/pattern/matching2/cat", func(msg *osc.OscMessage) {
-		fmt.Printf("Received message from '%s' matched '%s'\n", msg.Address, "/pattern/matching2/cat")
-		osc.PrintOscMessage(msg)
-	})
+	reader := bufio.NewReader(os.Stdin)
 
-	server.AddMsgHandler("/pattern/matching2/dog", func(msg *osc.OscMessage) {
-		fmt.Printf("Received message from '%s' matched '%s'\n", msg.Address, "/pattern/matching2/dog")
-		osc.PrintOscMessage(msg)
-	})
+	for {
+		c, err := reader.ReadByte()
+		if err != nil {
+			server.Close()
+			os.Exit(0)
+		}
 
-	fmt.Printf("Listening on %s:%d\n", address, port)
-	err := server.ListenAndDispatch()
-	if err != nil {
-		fmt.Println("Error")
+		if c == 'q' {
+			server.Close()
+			os.Exit(0)
+		}
 	}
 }
