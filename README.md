@@ -58,6 +58,6 @@ func main() {
         osc.PrintOscMessage(msg)
     })
  
-    server.ListenAndServe()
+    server.ListenAndDispatch()
 }
 ```
