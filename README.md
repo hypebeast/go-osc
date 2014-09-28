@@ -1,6 +1,6 @@
 # GoOSC
 
-This is an OSC protocol implementation in pure Go.
+Open Sound Control (OSC) library for Golang. Implemented in pure Go.
 
  * **Build Status:** [![Build Status](https://travis-ci.org/hypebeast/go-osc.png?branch=master)](https://travis-ci.org/hypebeast/go-osc)
  * **Documentation:** <http://godoc.org/github.com/hypebeast/go-osc/osc>
