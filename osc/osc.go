@@ -517,6 +517,9 @@ func NewOscServer(address string, port int) (server *OscServer) {
 
 // Close stops the OSC server and closes the connection.
 func (self *OscServer) Close() error {
+	if !self.running {
+		return errors.New("Server is not running")
+	}
 	self.running = false
 	return self.conn.Close()
 }
