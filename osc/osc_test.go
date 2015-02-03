@@ -276,3 +276,11 @@ func TestTypeTagsString(t *testing.T) {
 		t.Errorf("Type tag string should be ',iTF' and is: %s", typeTags)
 	}
 }
+
+func TestServerIsNotRunningAndGetsClosed(t *testing.T) {
+	server := NewOscServer("127.0.0.1", 8000)
+	err := server.Close()
+	if err == nil {
+		t.Errorf("Expected error if the the server is not running and it gets closed")
+	}
+}
