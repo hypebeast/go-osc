@@ -1018,7 +1018,7 @@ func timetagToTime(timetag uint64) (t time.Time) {
 // Utility and helper functions
 ////
 
-// PrintOscMessages pretty print an OscMessage to the standard output.
+// PrintOscMessages pretty prints an OscMessage to the standard output.
 func PrintOscMessage(msg *OscMessage) {
 	tags, err := msg.TypeTags()
 	if err != nil {
