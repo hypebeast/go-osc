@@ -3,6 +3,7 @@ package osc
 import (
 	"bufio"
 	"bytes"
+	"net"
 	"sync"
 	"testing"
 	"time"
@@ -91,7 +92,11 @@ func TestServerMessageDispatching(t *testing.T) {
 		case <-timeout:
 		case <-start:
 			time.Sleep(500 * time.Millisecond)
-			client := NewOscClient("localhost", 6677)
+			raddr, err := net.ResolveUDPAddr("udp", "localhost:6677")
+			if err != nil {
+				t.Error(err.Error())
+			}
+			client := NewOscClient(nil, raddr)
 			msg := NewOscMessage("/address/test")
 			msg.Append(int32(1122))
 			client.Send(msg)
@@ -154,7 +159,11 @@ func TestServerMessageReceiving(t *testing.T) {
 		select {
 		case <-timeout:
 		case <-start:
-			client := NewOscClient("localhost", 6677)
+			raddr, err := net.ResolveUDPAddr("udp", "localhost:6677")
+			if err != nil {
+				t.Error(err.Error())
+			}
+			client := NewOscClient(nil, raddr)
 			msg := NewOscMessage("/address/test")
 			msg.Append(int32(1122))
 			msg.Append(int32(3344))

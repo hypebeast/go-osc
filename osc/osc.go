@@ -46,8 +46,8 @@ type OscBundle struct {
 // An OSC client. It sends OSC messages and bundles to the given IP address
 // and port.
 type OscClient struct {
-	ipaddress string
-	port      int
+	laddr *net.UDPAddr
+	raddr *net.UDPAddr
 }
 
 // An OSC server. The server listens on Address and Port for incoming OSC packets
@@ -452,34 +452,33 @@ func (self *OscBundle) ToByteArray() (buffer []byte, err error) {
 // messages and OSC bundles over an UDP network connection. The argument ip
 // specifies the IP address and port defines the target port where the messages
 // and bundles will be send to.
-func NewOscClient(ip string, port int) (client *OscClient) {
-	return &OscClient{ipaddress: ip, port: port}
+func NewOscClient(laddr, raddr *net.UDPAddr) (client *OscClient) {
+	return &OscClient{laddr, raddr}
 }
 
 // Ip returns the IP address.
-func (client *OscClient) Ip() string {
-	return client.ipaddress
+func (client *OscClient) LocalAddr() *net.UDPAddr {
+	return client.laddr
 }
 
 // SetIp sets a new IP address.
-func (client *OscClient) SetIp(ip string) {
-	client.ipaddress = ip
+func (client *OscClient) RemoteAddr() *net.UDPAddr {
+	return client.raddr
 }
 
 // Port returns the port.
-func (client *OscClient) Port() int {
-	return client.port
+func (client *OscClient) SetLocalAddr(addr *net.UDPAddr) {
+	client.laddr = addr
 }
 
 // SetPort sets a new port.
-func (client *OscClient) SetPort(port int) {
-	client.port = port
+func (client *OscClient) SetRemoteAddr(addr *net.UDPAddr) {
+	client.raddr = addr
 }
 
 // Send sends an OSC Bundle or an OSC Message.
 func (client *OscClient) Send(packet OscPacket) (err error) {
-	addr, _ := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", client.ipaddress, client.port))
-	conn, err := net.DialUDP("udp", nil, addr)
+	conn, err := net.DialUDP("udp", client.laddr, client.raddr)
 	if err != nil {
 		return err
 	}
