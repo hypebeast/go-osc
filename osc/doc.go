@@ -54,11 +54,7 @@
 
    OSC client example:
 
-   remoteAddr, err := net.ResolveUDPAddr("udp", "localhost:8765")
-   if err != nil {
-      // handle err
-   }
-   client := osc.NewOscClient(nil, remoteAddr)
+   client := osc.NewOscClient("localhost", 8765)
    msg := osc.NewOscMessage("/osc/address")
    msg.Append(int32(111))
    msg.Append(true)
