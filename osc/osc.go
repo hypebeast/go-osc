@@ -461,17 +461,14 @@ func NewOscClient(ip string, port int) (client *OscClient) {
 func (client *OscClient) Ip() string {
 	return client.ipaddress
 }
-
 // SetIp sets a new IP address.
 func (client *OscClient) SetIp(ip string) {
 	client.ipaddress = ip
 }
-
 // Port returns the port.
 func (client *OscClient) Port() int {
 	return client.port
 }
-
 // SetPort sets a new port.
 func (client *OscClient) SetPort(port int) {
 	client.port = port
@@ -490,8 +487,8 @@ func (client *OscClient) SetLocalAddr(ip string, port int) error {
 
 // Send sends an OSC Bundle or an OSC Message.
 func (client *OscClient) Send(packet OscPacket) (err error) {
-	addr, _ := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", client.ipaddress, client.port))
-	conn, err := net.DialUDP("udp", nil, addr)
+	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", client.ipaddress, client.port))
+	conn, err := net.DialUDP("udp", client.laddr, addr)
 	if err != nil {
 		return err
 	}
