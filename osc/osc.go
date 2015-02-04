@@ -48,6 +48,7 @@ type OscBundle struct {
 type OscClient struct {
 	ipaddress string
 	port      int
+	laddr     *net.UDPAddr
 }
 
 // An OSC server. The server listens on Address and Port for incoming OSC packets
@@ -453,7 +454,7 @@ func (self *OscBundle) ToByteArray() (buffer []byte, err error) {
 // specifies the IP address and port defines the target port where the messages
 // and bundles will be send to.
 func NewOscClient(ip string, port int) (client *OscClient) {
-	return &OscClient{ipaddress: ip, port: port}
+	return &OscClient{ipaddress: ip, port: port, laddr: nil}
 }
 
 // Ip returns the IP address.
@@ -474,6 +475,17 @@ func (client *OscClient) Port() int {
 // SetPort sets a new port.
 func (client *OscClient) SetPort(port int) {
 	client.port = port
+}
+
+// SetLocalAddr sets the local address.
+func (client *OscClient) SetLocalAddr(ip string, port int) error {
+	laddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", ip, port))
+	if err != nil {
+		return err
+	} else {
+		client.laddr = laddr
+	}
+	return nil
 }
 
 // Send sends an OSC Bundle or an OSC Message.
