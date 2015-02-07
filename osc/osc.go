@@ -479,9 +479,8 @@ func (client *OscClient) SetLocalAddr(ip string, port int) error {
 	laddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", ip, port))
 	if err != nil {
 		return err
-	} else {
-		client.laddr = laddr
 	}
+	client.laddr = laddr
 	return nil
 }
 
