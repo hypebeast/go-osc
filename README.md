@@ -32,10 +32,7 @@ Open Sound Control (OSC) library for Golang. Implemented in pure Go.
 import "github.com/hypebeast/go-osc/osc"
 
 func main() {
-    ip := "localhost"
-    port := 8765
- 
-    client := osc.NewOscClient(ip, port)
+    client := osc.NewOscClient("localhost", 8765)
     msg := osc.NewOscMessage("/osc/address")
     msg.Append(int32(111))
     msg.Append(true)

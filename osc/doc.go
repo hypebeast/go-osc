@@ -54,10 +54,7 @@
 
    OSC client example:
 
-   ip := "localhost"
-   port := 8765
-
-   client := osc.NewOscClient(ip, port)
+   client := osc.NewOscClient("localhost", 8765)
    msg := osc.NewOscMessage("/osc/address")
    msg.Append(int32(111))
    msg.Append(true)
@@ -74,7 +71,7 @@
    osc.PrintOscMessage(msg)
    })
 
-   server.ListenAndServe()
+   server.ListenAndDispatch()
 
    Author: Sebastian Ruml <sebastian.ruml@gmail.com>
    Created: 2013.08.19

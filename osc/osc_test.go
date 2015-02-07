@@ -284,3 +284,15 @@ func TestServerIsNotRunningAndGetsClosed(t *testing.T) {
 		t.Errorf("Expected error if the the server is not running and it gets closed")
 	}
 }
+
+func TestClientSetLocalAddr(t *testing.T) {
+	client := NewOscClient("localhost", 8967)
+	err := client.SetLocalAddr("localhost", 41789)
+	if err != nil {
+		t.Error(err.Error())
+	}
+	expectedAddr := "127.0.0.1:41789"
+	if client.laddr.String() != expectedAddr {
+		t.Errorf("Expected laddr to be %s but was %s", expectedAddr, client.laddr.String())
+	}
+}
