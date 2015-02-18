@@ -10,7 +10,7 @@ import (
 
 func TestAppendArguments(t *testing.T) {
 	oscAddress := "/address"
-	message := NewOscMessage(oscAddress)
+	message := NewMessage(oscAddress)
 	if message.Address != oscAddress {
 		t.Errorf("OSC address should be \"%s\" and is \"%s\"", oscAddress, message.Address)
 	}
@@ -25,8 +25,8 @@ func TestAppendArguments(t *testing.T) {
 }
 
 func TestEqualMessage(t *testing.T) {
-	msg1 := NewOscMessage("/address")
-	msg2 := NewOscMessage("/address")
+	msg1 := NewMessage("/address")
+	msg2 := NewMessage("/address")
 
 	msg1.Append(1234)
 	msg2.Append(1234)
@@ -39,16 +39,16 @@ func TestEqualMessage(t *testing.T) {
 }
 
 func TestAddMsgHandler(t *testing.T) {
-	server := NewOscServer("localhost", 6677)
-	err := server.AddMsgHandler("/address/test", func(msg *OscMessage) {})
+	server := NewServer("localhost", 6677)
+	err := server.AddMsgHandler("/address/test", func(msg *Message) {})
 	if err != nil {
 		t.Error("Expected that OSC address '/address/test' is valid")
 	}
 }
 
 func TestAddMsgHandlerWithInvalidAddress(t *testing.T) {
-	server := NewOscServer("localhost", 6677)
-	err := server.AddMsgHandler("/address*/test", func(msg *OscMessage) {})
+	server := NewServer("localhost", 6677)
+	err := server.AddMsgHandler("/address*/test", func(msg *Message) {})
 	if err == nil {
 		t.Error("Expected error with '/address*/test'")
 	}
@@ -62,8 +62,8 @@ func TestServerMessageDispatching(t *testing.T) {
 
 	// Start the OSC server in a new go-routine
 	go func() {
-		server := NewOscServer("localhost", 6677)
-		err := server.AddMsgHandler("/address/test", func(msg *OscMessage) {
+		server := NewServer("localhost", 6677)
+		err := server.AddMsgHandler("/address/test", func(msg *Message) {
 			if len(msg.Arguments) != 1 {
 				t.Error("Argument length should be 1 and is: " + string(len(msg.Arguments)))
 			}
@@ -91,8 +91,8 @@ func TestServerMessageDispatching(t *testing.T) {
 		case <-timeout:
 		case <-start:
 			time.Sleep(500 * time.Millisecond)
-			client := NewOscClient("localhost", 6677)
-			msg := NewOscMessage("/address/test")
+			client := NewClient("localhost", 6677)
+			msg := NewMessage("/address/test")
 			msg.Append(int32(1122))
 			client.Send(msg)
 		}
@@ -117,7 +117,7 @@ func TestServerMessageReceiving(t *testing.T) {
 
 	// Start the server in a go-routine
 	go func() {
-		server := NewOscServer("localhost", 6677)
+		server := NewServer("localhost", 6677)
 		server.Listen()
 
 		// Start the client
@@ -130,7 +130,7 @@ func TestServerMessageReceiving(t *testing.T) {
 			}
 
 			if packet != nil {
-				msg := packet.(*OscMessage)
+				msg := packet.(*Message)
 				if msg.CountArguments() != 2 {
 					t.Errorf("Argument length should be 2 and is: %d\n", msg.CountArguments())
 				}
@@ -154,8 +154,8 @@ func TestServerMessageReceiving(t *testing.T) {
 		select {
 		case <-timeout:
 		case <-start:
-			client := NewOscClient("localhost", 6677)
-			msg := NewOscMessage("/address/test")
+			client := NewClient("localhost", 6677)
+			msg := NewMessage("/address/test")
 			msg.Append(int32(1122))
 			msg.Append(int32(3344))
 			time.Sleep(500 * time.Millisecond)
@@ -262,7 +262,7 @@ func TestPadBytesNeeded(t *testing.T) {
 }
 
 func TestTypeTagsString(t *testing.T) {
-	msg := NewOscMessage("/some/address")
+	msg := NewMessage("/some/address")
 	msg.Append(int32(100))
 	msg.Append(true)
 	msg.Append(false)
@@ -278,7 +278,7 @@ func TestTypeTagsString(t *testing.T) {
 }
 
 func TestServerIsNotRunningAndGetsClosed(t *testing.T) {
-	server := NewOscServer("127.0.0.1", 8000)
+	server := NewServer("127.0.0.1", 8000)
 	err := server.Close()
 	if err == nil {
 		t.Errorf("Expected error if the the server is not running and it gets closed")
@@ -286,7 +286,7 @@ func TestServerIsNotRunningAndGetsClosed(t *testing.T) {
 }
 
 func TestClientSetLocalAddr(t *testing.T) {
-	client := NewOscClient("localhost", 8967)
+	client := NewClient("localhost", 8967)
 	err := client.SetLocalAddr("localhost", 41789)
 	if err != nil {
 		t.Error(err.Error())
