@@ -3,15 +3,16 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"github.com/hypebeast/go-osc/osc"
 	"os"
+
+	"github.com/hypebeast/go-osc/osc"
 )
 
 // TODO: Revise the server
 func main() {
 	address := "127.0.0.1"
 	port := 8765
-	server := osc.NewOscServer(address, port)
+	server := osc.NewServer(address, port)
 
 	fmt.Println("### Welcome to go-osc receiver demo")
 	fmt.Println("Press \"q\" to exit")
@@ -33,16 +34,16 @@ func main() {
 				default:
 					fmt.Println("Unknow packet type!")
 
-				case *osc.OscMessage:
+				case *osc.Message:
 					fmt.Printf("-- OSC Message: ")
-					osc.PrintOscMessage(packet.(*osc.OscMessage))
+					osc.PrintMessage(packet.(*osc.Message))
 
-				case *osc.OscBundle:
+				case *osc.Bundle:
 					fmt.Println("-- OSC Bundle:")
-					bundle := packet.(*osc.OscBundle)
+					bundle := packet.(*osc.Bundle)
 					for i, message := range bundle.Messages {
 						fmt.Printf("  -- OSC Message #%d: ", i+1)
-						osc.PrintOscMessage(message)
+						osc.PrintMessage(message)
 					}
 				}
 			}
