@@ -163,13 +163,13 @@ func (s *OscDispatcher) Dispatch(packet Packet) {
 ////
 
 // NewMessage returns a new Message. The address parameter is the OSC address.
-func NewMessage(address string) (msg *Message) {
-	return &Message{Address: address}
+func NewMessage(address string, arguments ...interface{}) (msg *Message) {
+	return &Message{Address: address, Arguments: arguments}
 }
 
 // Append appends the given argument to the arguments list.
-func (msg *Message) Append(argument interface{}) {
-	msg.Arguments = append(msg.Arguments, argument)
+func (msg *Message) Append(arguments ...interface{}) {
+	msg.Arguments = append(msg.Arguments, arguments...)
 }
 
 // Equals determines if the given OSC Message b is equal to the current OSC Message.
