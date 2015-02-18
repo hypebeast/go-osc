@@ -3,6 +3,7 @@ package osc
 import (
 	"bufio"
 	"bytes"
+	"net"
 	"sync"
 	"testing"
 	"time"
@@ -38,17 +39,17 @@ func TestEqualMessage(t *testing.T) {
 	}
 }
 
-func TestAddMsgHandler(t *testing.T) {
-	server := NewServer("localhost", 6677)
-	err := server.AddMsgHandler("/address/test", func(msg *Message) {})
+func TestHandle(t *testing.T) {
+	server := &Server{Addr: "localhost:6677"}
+	err := server.Handle("/address/test", func(msg *Message) {})
 	if err != nil {
 		t.Error("Expected that OSC address '/address/test' is valid")
 	}
 }
 
-func TestAddMsgHandlerWithInvalidAddress(t *testing.T) {
-	server := NewServer("localhost", 6677)
-	err := server.AddMsgHandler("/address*/test", func(msg *Message) {})
+func TestHandleWithInvalidAddress(t *testing.T) {
+	server := &Server{Addr: "localhost:6677"}
+	err := server.Handle("/address*/test", func(msg *Message) {})
 	if err == nil {
 		t.Error("Expected error with '/address*/test'")
 	}
@@ -62,8 +63,14 @@ func TestServerMessageDispatching(t *testing.T) {
 
 	// Start the OSC server in a new go-routine
 	go func() {
-		server := NewServer("localhost", 6677)
-		err := server.AddMsgHandler("/address/test", func(msg *Message) {
+		conn, err := net.ListenPacket("udp", "localhost:6677")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Close()
+
+		server := &Server{Addr: "localhost:6677"}
+		err = server.Handle("/address/test", func(msg *Message) {
 			if len(msg.Arguments) != 1 {
 				t.Error("Argument length should be 1 and is: " + string(len(msg.Arguments)))
 			}
@@ -73,16 +80,15 @@ func TestServerMessageDispatching(t *testing.T) {
 			}
 
 			// Stop OSC server
-			server.Close()
+			conn.Close()
 			finish <- true
 		})
-
 		if err != nil {
 			t.Error("Error adding message handler")
 		}
 
 		start <- true
-		server.ListenAndDispatch()
+		server.Serve(conn)
 	}()
 
 	go func() {
@@ -117,35 +123,39 @@ func TestServerMessageReceiving(t *testing.T) {
 
 	// Start the server in a go-routine
 	go func() {
-		server := NewServer("localhost", 6677)
-		server.Listen()
+		server := &Server{}
+		c, err := net.ListenPacket("udp", "localhost:6677")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer c.Close()
 
 		// Start the client
 		start <- true
 
-		for {
-			packet, err := server.ReceivePacket()
-			if err != nil {
-				t.Error("Server error")
+		packet, err := server.ReceivePacket(c)
+		if err != nil {
+			t.Error("Server error")
+		}
+		if packet == nil {
+			t.Error("nil packet")
+		}
+		if packet != nil {
+			msg := packet.(*Message)
+			if msg.CountArguments() != 2 {
+				t.Errorf("Argument length should be 2 and is: %d\n", msg.CountArguments())
 			}
 
-			if packet != nil {
-				msg := packet.(*Message)
-				if msg.CountArguments() != 2 {
-					t.Errorf("Argument length should be 2 and is: %d\n", msg.CountArguments())
-				}
-
-				if msg.Arguments[0].(int32) != 1122 {
-					t.Error("Argument should be 1122 and is: " + string(msg.Arguments[0].(int32)))
-				}
-
-				if msg.Arguments[1].(int32) != 3344 {
-					t.Error("Argument should be 3344 and is: " + string(msg.Arguments[1].(int32)))
-				}
-
-				server.Close()
-				finish <- true
+			if msg.Arguments[0].(int32) != 1122 {
+				t.Error("Argument should be 1122 and is: " + string(msg.Arguments[0].(int32)))
 			}
+
+			if msg.Arguments[1].(int32) != 3344 {
+				t.Error("Argument should be 3344 and is: " + string(msg.Arguments[1].(int32)))
+			}
+
+			c.Close()
+			finish <- true
 		}
 	}()
 
@@ -172,6 +182,73 @@ func TestServerMessageReceiving(t *testing.T) {
 	}()
 
 	done.Wait()
+}
+
+func TestReadTimeout(t *testing.T) {
+	start := make(chan bool)
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+
+		select {
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out")
+		case <-start:
+			client := NewClient("localhost", 6677)
+			msg := NewMessage("/address/test1")
+			err := client.Send(msg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			time.Sleep(150 * time.Millisecond)
+			msg = NewMessage("/address/test2")
+			err = client.Send(msg)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+
+		server := &Server{ReadTimeout: 100 * time.Millisecond}
+		c, err := net.ListenPacket("udp", "localhost:6677")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer c.Close()
+
+		start <- true
+		p, err := server.ReceivePacket(c)
+		if err != nil {
+			t.Fatal("server error:", err)
+			return
+		}
+		if a := p.(*Message).Address; a != "/address/test1" {
+			t.Fatalf("wrong address, got %s want %s", a, "/address/test1")
+		}
+
+		// Second receive should time out since client is delayed 150 milliseconds
+		_, err = server.ReceivePacket(c)
+		if err == nil {
+			t.Fatal("expected error")
+			return
+		}
+
+		// Next receive should get it
+		p, err = server.ReceivePacket(c)
+		if err != nil {
+			t.Fatalf("server error:", err)
+		}
+		if a := p.(*Message).Address; a != "/address/test2" {
+			t.Fatalf("wrong address, got %s want %s", a, "/address/test2")
+		}
+	}()
+
+	wg.Wait()
 }
 
 func TestReadPaddedString(t *testing.T) {
@@ -274,14 +351,6 @@ func TestTypeTagsString(t *testing.T) {
 
 	if typeTags != ",iTF" {
 		t.Errorf("Type tag string should be ',iTF' and is: %s", typeTags)
-	}
-}
-
-func TestServerIsNotRunningAndGetsClosed(t *testing.T) {
-	server := NewServer("127.0.0.1", 8000)
-	err := server.Close()
-	if err == nil {
-		t.Errorf("Expected error if the the server is not running and it gets closed")
 	}
 }
 
