@@ -5,6 +5,7 @@ package osc
 import (
 	"bufio"
 	"bytes"
+	"encoding"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -21,7 +22,7 @@ const (
 
 // Packet is the interface for Message and Bundle.
 type Packet interface {
-	ToByteArray() (buffer []byte, err error)
+	encoding.BinaryMarshaler
 }
 
 // Message represents a single OSC message. An OSC message consists of an OSC address
@@ -288,12 +289,12 @@ func (msg *Message) CountArguments() int {
 	return len(msg.Arguments)
 }
 
-// ToByteArray serializes the OSC message to a byte buffer. The byte buffer
+// MarshalBinary serializes the OSC message to a byte buffer. The byte buffer
 // has the following format:
 // 1. OSC Address Pattern
 // 2. OSC Type Tag String
 // 3. OSC Arguments
-func (msg *Message) ToByteArray() (buffer []byte, err error) {
+func (msg *Message) MarshalBinary() (buffer []byte, err error) {
 	// The byte buffer for the message
 	var data = new(bytes.Buffer)
 
@@ -370,7 +371,8 @@ func (msg *Message) ToByteArray() (buffer []byte, err error) {
 			typetags = append(typetags, 't')
 
 			timeTag := arg.(Timetag)
-			_, err = payload.Write(timeTag.ToByteArray())
+			b, _ := timeTag.MarshalBinary()
+			_, err = payload.Write(b)
 			if err != nil {
 				return nil, err
 			}
@@ -418,14 +420,14 @@ func (b *Bundle) Append(pck Packet) (err error) {
 	return nil
 }
 
-// ToByteArray serializes the OSC bundle to a byte array with the following format:
+// MarshalBinary serializes the OSC bundle to a byte array with the following format:
 // 1. Bundle string: '#bundle'
 // 2. OSC timetag
 // 3. Length of first OSC bundle element
 // 4. First bundle element
 // 5. Length of n OSC bundle element
 // 6. n bundle element
-func (b *Bundle) ToByteArray() (buffer []byte, err error) {
+func (b *Bundle) MarshalBinary() (buffer []byte, err error) {
 	var data = new(bytes.Buffer)
 
 	// Add the '#bundle' string
@@ -435,7 +437,8 @@ func (b *Bundle) ToByteArray() (buffer []byte, err error) {
 	}
 
 	// Add the timetag
-	if _, err = data.Write(b.Timetag.ToByteArray()); err != nil {
+	bd, _ := b.Timetag.MarshalBinary()
+	if _, err = data.Write(bd); err != nil {
 		return nil, err
 	}
 
@@ -444,7 +447,7 @@ func (b *Bundle) ToByteArray() (buffer []byte, err error) {
 		var msgLen int
 		var msgBuf []byte
 
-		msgBuf, err = m.ToByteArray()
+		msgBuf, err = m.MarshalBinary()
 		if err != nil {
 			return nil, err
 		}
@@ -467,7 +470,7 @@ func (b *Bundle) ToByteArray() (buffer []byte, err error) {
 		var bLen int
 		var bBuf []byte
 
-		bBuf, err = b.ToByteArray()
+		bBuf, err = b.MarshalBinary()
 		if err != nil {
 			return nil, err
 		}
@@ -539,7 +542,7 @@ func (client *Client) Send(packet Packet) (err error) {
 	}
 	defer conn.Close()
 
-	data, err := packet.ToByteArray()
+	data, err := packet.MarshalBinary()
 	if err != nil {
 		return err
 	}
@@ -583,11 +586,6 @@ func (s *Server) ListenAndServe() error {
 // retreived OSC packets. If something goes wrong an error is returned.
 func (s *Server) Serve(c net.PacketConn) error {
 	var tempDelay time.Duration
-
-	if s.Dispatcher == nil {
-		s.Dispatcher = NewOscDispatcher()
-	}
-
 	for {
 		msg, err := s.readFromConnection(c)
 		if err != nil {
@@ -869,11 +867,11 @@ func (t *Timetag) TimeTag() uint64 {
 	return t.timeTag
 }
 
-// ToByteArray converts the OSC Time Tag to a byte array.
-func (t *Timetag) ToByteArray() []byte {
+// MarshalBinary converts the OSC Time Tag to a byte array.
+func (t *Timetag) MarshalBinary() ([]byte, error) {
 	var data = new(bytes.Buffer)
 	binary.Write(data, binary.BigEndian, t.timeTag)
-	return data.Bytes()
+	return data.Bytes(), nil
 }
 
 // SetTime sets the value of the OSC Time Tag.
