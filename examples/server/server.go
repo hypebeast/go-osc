@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"net"
 	"os"
 
 	"github.com/hypebeast/go-osc/osc"
@@ -10,22 +11,24 @@ import (
 
 // TODO: Revise the server
 func main() {
-	address := "127.0.0.1"
-	port := 8765
-	server := osc.NewServer(address, port)
+	addr := "127.0.0.1:8765"
+	server := &osc.Server{}
+	conn, err := net.ListenPacket("udp", addr)
+	if err != nil {
+		fmt.Println("Couldn't listen:", err)
+	}
+	defer conn.Close()
 
 	fmt.Println("### Welcome to go-osc receiver demo")
 	fmt.Println("Press \"q\" to exit")
 
 	go func() {
-		fmt.Printf("Start listening on \"%s:%d\"\n", address, port)
-		server.Listen()
+		fmt.Println("Start listening on", addr)
 
 		for {
-			packet, err := server.ReceivePacket()
+			packet, err := server.ReceivePacket(conn)
 			if err != nil {
 				fmt.Println("Server error: " + err.Error())
-				server.Close()
 				os.Exit(1)
 			}
 
@@ -55,12 +58,10 @@ func main() {
 	for {
 		c, err := reader.ReadByte()
 		if err != nil {
-			server.Close()
 			os.Exit(0)
 		}
 
 		if c == 'q' {
-			server.Close()
 			os.Exit(0)
 		}
 	}
