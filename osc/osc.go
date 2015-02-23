@@ -54,12 +54,9 @@ type Client struct {
 // An OSC server. The server listens on Address and Port for incoming OSC packets
 // and bundles.
 type Server struct {
-	Address     string         // Address to listen on
-	Port        int            // Port to listen on
-	ReadTimeout time.Duration  // Read Timeout
-	dispatcher  *OscDispatcher // Dispatcher that dispatches OSC packets/messages
-	running     bool           // Flag to store if the server is running or not
-	conn        *net.UDPConn   // UDP connection object
+	Addr        string
+	Dispatcher  *OscDispatcher
+	ReadTimeout time.Duration
 }
 
 // Timetag represents an OSC Time Tag.
@@ -516,114 +513,72 @@ func (client *Client) Send(packet Packet) (err error) {
 // Server
 ////
 
-// NewServer returns a new Server.
-func NewServer(address string, port int) (server *Server) {
-	return &Server{
-		Address:     address,
-		Port:        port,
-		dispatcher:  NewOscDispatcher(),
-		ReadTimeout: 0,
-		running:     false}
-}
-
-// Close stops the OSC server and closes the connection.
-func (self *Server) Close() error {
-	if !self.running {
-		return errors.New("Server is not running")
+// Handle registers a new message handler function for an OSC address. The handler
+// is the function called for incoming OscMessages that match 'address'.
+func (s *Server) Handle(address string, handler HandlerFunc) error {
+	if s.Dispatcher == nil {
+		s.Dispatcher = NewOscDispatcher()
 	}
-	self.running = false
-	return self.conn.Close()
-}
-
-// AddMsgHandler registers a new message handler function for an OSC address. The handler
-// is the function called for incoming Messages that match 'address'.
-func (self *Server) AddMsgHandler(address string, handler HandlerFunc) error {
-	return self.dispatcher.AddMsgHandler(address, handler)
+	return s.Dispatcher.AddMsgHandler(address, handler)
 }
 
 // ListenAndServe retrieves incoming OSC packets and dispatches the retrieved
 // OSC packets.
-func (self *Server) ListenAndDispatch() error {
-	if self.running {
-		return errors.New("Server is already running")
+func (s *Server) ListenAndServe() error {
+	if s.Dispatcher == nil {
+		s.Dispatcher = NewOscDispatcher()
 	}
 
-	if self.dispatcher == nil {
-		return errors.New("No dispatcher definied")
-	}
-
-	service := fmt.Sprintf("%s:%d", self.Address, self.Port)
-	udpAddr, err := net.ResolveUDPAddr("udp", service)
+	ln, err := net.ListenPacket("udp", s.Addr)
 	if err != nil {
 		return err
 	}
-
-	self.conn, err = net.ListenUDP("udp", udpAddr)
-	if err != nil {
-		return err
-	}
-
-	// Set read timeout
-	if self.ReadTimeout != 0 {
-		self.conn.SetReadDeadline(time.Now().Add(self.ReadTimeout))
-	}
-
-	self.running = true
-	for self.running {
-		msg, err := self.readFromConnection()
-		if err == nil {
-			go self.dispatcher.Dispatch(msg)
-		}
-	}
-
-	return nil
+	return s.Serve(ln)
 }
 
-func (self *Server) Listen() error {
-	if self.running {
-		return errors.New("Server is already running")
+func (s *Server) Serve(c net.PacketConn) error {
+	var tempDelay time.Duration
+	for {
+		msg, err := s.readFromConnection(c)
+		if err != nil {
+			if ne, ok := err.(net.Error); ok && ne.Temporary() {
+				if tempDelay == 0 {
+					tempDelay = 5 * time.Millisecond
+				} else {
+					tempDelay *= 2
+				}
+				if max := 1 * time.Second; tempDelay > max {
+					tempDelay = max
+				}
+				time.Sleep(tempDelay)
+				continue
+			}
+			return err
+		}
+		tempDelay = 0
+		go s.Dispatcher.Dispatch(msg)
 	}
-
-	service := fmt.Sprintf("%s:%d", self.Address, self.Port)
-	udpAddr, err := net.ResolveUDPAddr("udp", service)
-	if err != nil {
-		return err
-	}
-
-	conn, err := net.ListenUDP("udp", udpAddr)
-	if err != nil {
-		return err
-	}
-
-	// Set read timeout
-	if self.ReadTimeout != 0 {
-		conn.SetReadDeadline(time.Now().Add(self.ReadTimeout))
-	}
-
-	self.conn = conn
-	self.running = true
 
 	return nil
 }
 
 // Listen listens for incoming OSC packets and returns the packet if one is received.
-func (self *Server) ReceivePacket() (packet Packet, err error) {
-	msg, err := self.readFromConnection()
-	if err == nil {
-		return msg, nil
-	}
-
-	return nil, err
+func (s *Server) ReceivePacket(c net.PacketConn) (packet Packet, err error) {
+	return s.readFromConnection(c)
 }
 
 // readFromConnection retrieves OSC packets.
-func (self *Server) readFromConnection() (packet Packet, err error) {
+func (s *Server) readFromConnection(c net.PacketConn) (packet Packet, err error) {
+	if s.ReadTimeout != 0 {
+		c.SetReadDeadline(time.Now().Add(s.ReadTimeout))
+	}
 	data := make([]byte, 65535)
 	var n, start int
-	n, _, err = self.conn.ReadFromUDP(data)
-	packet, err = self.readPacket(bufio.NewReader(bytes.NewBuffer(data)), &start, n)
-
-	return packet, nil
+	n, _, err = c.ReadFrom(data)
+	if err != nil {
+		return nil, err
+	}
+	return s.readPacket(bufio.NewReader(bytes.NewBuffer(data)), &start, n)
 }
 
 // receivePacket receives an OSC packet from the given reader.
