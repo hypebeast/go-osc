@@ -15,7 +15,7 @@ func main() {
 	server := &osc.Server{}
 	conn, err := net.ListenPacket("udp", addr)
 	if err != nil {
-		fmt.Println("Couldn't listen:", err)
+		fmt.Println("Couldn't listen: ", err)
 	}
 	defer conn.Close()
 
