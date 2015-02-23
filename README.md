@@ -3,7 +3,7 @@
 Open Sound Control (OSC) library for Golang. Implemented in pure Go.
 
  * **Build Status:** [![Build Status](https://travis-ci.org/hypebeast/go-osc.png?branch=master)](https://travis-ci.org/hypebeast/go-osc)
- * **Documentation:** <http://godoc.org/github.com/hypebeast/go-osc/osc>
+ * **Documentation:** [![GoDoc](https://godoc.org/github.com/hypebeast/go-osc/osc?status.svg)](https://godoc.org/github.com/hypebeast/go-osc/osc)
 
 [![views](https://sourcegraph.com/api/repos/github.com/hypebeast/go-osc/.counters/views.svg)](https://sourcegraph.com/github.com/hypebeast/go-osc)
 [![views 24h](https://sourcegraph.com/api/repos/github.com/hypebeast/go-osc/.counters/views-24h.svg?no-count=1)](https://sourcegraph.com/github.com/hypebeast/go-osc)
