@@ -548,6 +548,11 @@ func (s *Server) ListenAndServe() error {
 // retreived OSC packets. If something goes wrong an error is returned.
 func (s *Server) Serve(c net.PacketConn) error {
 	var tempDelay time.Duration
+
+	if s.Dispatcher == nil {
+		s.Dispatcher = NewOscDispatcher()
+	}
+
 	for {
 		msg, err := s.readFromConnection(c)
 		if err != nil {
