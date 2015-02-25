@@ -38,8 +38,8 @@ Open Sound Control (OSC) library for Golang. Implemented in pure Go.
 import "github.com/hypebeast/go-osc/osc"
 
 func main() {
-    client := osc.NewOscClient("localhost", 8765)
-    msg := osc.NewOscMessage("/osc/address")
+    client := osc.NewClient("localhost", 8765)
+    msg := osc.NewMessage("/osc/address")
     msg.Append(int32(111))
     msg.Append(true)
     msg.Append("hello")
@@ -50,17 +50,18 @@ func main() {
 ### Server
 
 ```go
+package main
+
 import "github.com/hypebeast/go-osc/osc"
 
 func main() {
-    address := "127.0.0.1"
-    port := 8765
-    server := osc.NewOscServer(address, port)
- 
-    server.AddMsgHandler("/osc/address", func(msg *osc.OscMessage) {
-        osc.PrintOscMessage(msg)
-    })
- 
-    server.ListenAndDispatch()
+  addr := "127.0.0.1:8765"
+  server := &osc.Server{Addr: addr}
+
+  server.Handle("/message/address", func(msg *osc.Message) {
+    osc.PrintMessage(msg)
+  })
+
+  server.ListenAndServe()
 }
 ```

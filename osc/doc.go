@@ -58,23 +58,22 @@ Usage
 
 OSC client example:
 
-   client := osc.NewOscClient("localhost", 8765)
-   msg := osc.NewOscMessage("/osc/address")
+   client := osc.NewClient("localhost", 8765)
+   msg := osc.NewMessage("/osc/address")
    msg.Append(int32(111))
    msg.Append(true)
    msg.Append("hello")
    client.Send(msg)
 
-   OSC server example:
+OSC server example:
 
-   address := "127.0.0.1"
-   port := 8765
-   server := osc.NewOscServer(address, port)
+   addr := "127.0.0.1:8765"
+   server := &osc.Server{Addr: addr}
 
-   server.AddMsgHandler("/osc/address", func(msg *osc.OscMessage) {
-   osc.PrintOscMessage(msg)
+   server.Handle("/message/address", func(msg *osc.Message) {
+      osc.PrintMessage(msg)
    })
 
-   server.ListenAndDispatch()
+   server.ListenAndServe()
 */
 package osc
