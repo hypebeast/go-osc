@@ -15,11 +15,8 @@ import (
 )
 
 const (
-	// The time tag value consisting of 63 zero bits followed by a one in the
-	// least signifigant bit is a special case meaning "immediately."
-	timeTagImmediate      = uint64(1)
 	secondsFrom1900To1970 = 2208988800
-	BUNDLE_TAG            = "#bundle"
+	bundleTagString       = "#bundle"
 )
 
 // Packet is the interface for Message and Bundle.
@@ -27,32 +24,33 @@ type Packet interface {
 	ToByteArray() (buffer []byte, err error)
 }
 
-// Represents a single OSC message. An OSC message consists of an OSC address
+// Message represents a single OSC message. An OSC message consists of an OSC address
 // pattern and zero or more arguments.
 type Message struct {
 	Address   string
 	Arguments []interface{}
 }
 
-// An OSC Bundle consists of the OSC-string "#bundle" followed by an OSC Time Tag,
-// followed by zero or more OSC bundle/message elements. The OSC-timetag is a 64-bit fixed
-// point time tag. See http://opensoundcontrol.org/spec-1_0 for more information.
+// Bundle represents an OSC bundle. It consists of the OSC-string "#bundle" followed
+// by an OSC Time Tag, followed by zero or more OSC bundle/message elements. The
+// OSC-timetag is a 64-bit fixed point time tag. See
+// http://opensoundcontrol.org/spec-1_0 for more information.
 type Bundle struct {
 	Timetag  Timetag
 	Messages []*Message
 	Bundles  []*Bundle
 }
 
-// An OSC client. It sends OSC messages and bundles to the given IP address
-// and port.
+// Client enables you to send OSC packets. It sends OSC messages and bundles to the
+// given IP address and port.
 type Client struct {
 	ipaddress string
 	port      int
 	laddr     *net.UDPAddr
 }
 
-// An OSC server. The server listens on Address and Port for incoming OSC packets
-// and bundles.
+// Server represents an OSC server. The server listens on Address and Port for
+// incoming OSC packets and bundles.
 type Server struct {
 	Addr        string
 	Dispatcher  *OscDispatcher
@@ -71,19 +69,19 @@ type Timetag struct {
 	MinValue uint64 // Minimum value of an OSC Time Tag. Is always 1.
 }
 
-// Interface for an OSC message dispatcher. A dispatcher is responsible for
-// dispatching received OSC messages.
+// Dispatcher is an interface for an OSC message dispatcher. A dispatcher is
+// responsible for dispatching received OSC messages.
 type Dispatcher interface {
 	Dispatch(packet Packet)
 }
 
-// OSC message handler interface. Every handler function for an OSC message must
-// implement this interface.
+// Handler is an interface for message handlers. Every handler implementation for
+// an OSC message must implement this interface.
 type Handler interface {
 	HandleMessage(msg *Message)
 }
 
-// Type defintion for an OSC handler function
+// HandlerFunc implements the Handler interface. Type defintion for an OSC handler function
 type HandlerFunc func(msg *Message)
 
 // HandleMessage calls themeself with the given OSC Message. Implements the
@@ -96,7 +94,8 @@ func (f HandlerFunc) HandleMessage(msg *Message) {
 // OscDispatcher
 ////
 
-// Dispatcher for OSC packets.
+// OscDispatcher is a dispatcher for OSC packets. It handles the dispatching of
+// received OSC packets.
 type OscDispatcher struct {
 	handlers map[string]Handler
 }
@@ -107,31 +106,31 @@ func NewOscDispatcher() (dispatcher *OscDispatcher) {
 }
 
 // AddMsgHandler adds a new message handler for the given OSC address.
-func (self *OscDispatcher) AddMsgHandler(address string, handler HandlerFunc) error {
+func (s *OscDispatcher) AddMsgHandler(address string, handler HandlerFunc) error {
 	for _, chr := range "*?,[]{}# " {
 		if strings.Contains(address, fmt.Sprintf("%c", chr)) {
 			return errors.New("OSC Address string may not contain any characters in \"*?,[]{}# \n")
 		}
 	}
 
-	if existsAddress(address, self.handlers) {
+	if existsAddress(address, s.handlers) {
 		return errors.New("OSC address exists already")
 	}
 
-	self.handlers[address] = handler
+	s.handlers[address] = handler
 
 	return nil
 }
 
 // Dispatch dispatches OSC packets. Implements the Dispatcher interface.
-func (self *OscDispatcher) Dispatch(packet Packet) {
+func (s *OscDispatcher) Dispatch(packet Packet) {
 	switch packet.(type) {
 	default:
 		return
 
 	case *Message:
 		msg, _ := packet.(*Message)
-		for address, handler := range self.handlers {
+		for address, handler := range s.handlers {
 			if msg.Match(address) {
 				handler.HandleMessage(msg)
 			}
@@ -144,7 +143,7 @@ func (self *OscDispatcher) Dispatch(packet Packet) {
 		go func() {
 			<-timer.C
 			for _, message := range bundle.Messages {
-				for address, handler := range self.handlers {
+				for address, handler := range s.handlers {
 					if message.Match(address) {
 						handler.HandleMessage(message)
 					}
@@ -153,7 +152,7 @@ func (self *OscDispatcher) Dispatch(packet Packet) {
 
 			// Process all bundles
 			for _, b := range bundle.Bundles {
-				self.Dispatch(b)
+				s.Dispatch(b)
 			}
 		}()
 	}
@@ -223,8 +222,8 @@ func (msg *Message) ClearData() {
 	msg.Arguments = msg.Arguments[len(msg.Arguments):]
 }
 
-// Returns true, if the address of the OSC Message matches the given address.
-// Case sensitive!
+// Match returns true, if the address of the OSC Message matches the given address.
+// The match is case sensitive!
 func (msg *Message) Match(address string) bool {
 	exp := getRegEx(msg.Address)
 
@@ -254,8 +253,8 @@ func (msg *Message) CountArguments() int {
 	return len(msg.Arguments)
 }
 
-// ToByteBuffer serializes the OSC message to a byte buffer. The byte buffer
-// is of the following format:
+// ToByteArray serializes the OSC message to a byte buffer. The byte buffer
+// has the following format:
 // 1. OSC Address Pattern
 // 2. OSC Type Tag String
 // 3. OSC Arguments
@@ -278,7 +277,7 @@ func (msg *Message) ToByteArray() (buffer []byte, err error) {
 		// FIXME: Use t instead of arg
 		switch t := arg.(type) {
 		default:
-			return nil, errors.New(fmt.Sprintf("OSC - unsupported type: %T", t))
+			return nil, fmt.Errorf("OSC - unsupported type: %T", t)
 
 		case bool:
 			if arg.(bool) == true {
@@ -336,7 +335,10 @@ func (msg *Message) ToByteArray() (buffer []byte, err error) {
 			typetags = append(typetags, 't')
 
 			timeTag := arg.(Timetag)
-			payload.Write(timeTag.ToByteArray())
+			_, err = payload.Write(timeTag.ToByteArray())
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -347,7 +349,10 @@ func (msg *Message) ToByteArray() (buffer []byte, err error) {
 	}
 
 	// Write the payload (OSC arguments) to the data buffer
-	data.Write(payload.Bytes())
+	_, err = data.Write(payload.Bytes())
+	if err != nil {
+		return nil, err
+	}
 
 	return data.Bytes(), nil
 }
@@ -363,16 +368,16 @@ func NewBundle(time time.Time) (bundle *Bundle) {
 }
 
 // Append appends an OSC bundle or OSC message to the bundle.
-func (self *Bundle) Append(pck Packet) (err error) {
+func (b *Bundle) Append(pck Packet) (err error) {
 	switch t := pck.(type) {
 	default:
-		return errors.New(fmt.Sprintf("Unsupported OSC packet type: only Bundle and Message are supported.", t))
+		return fmt.Errorf("Unsupported OSC packet type: only Bundle and Message are supported.")
 
 	case *Bundle:
-		self.Bundles = append(self.Bundles, t)
+		b.Bundles = append(b.Bundles, t)
 
 	case *Message:
-		self.Messages = append(self.Messages, t)
+		b.Messages = append(b.Messages, t)
 	}
 
 	return nil
@@ -385,7 +390,7 @@ func (self *Bundle) Append(pck Packet) (err error) {
 // 4. First bundle element
 // 5. Length of n OSC bundle element
 // 6. n bundle element
-func (self *Bundle) ToByteArray() (buffer []byte, err error) {
+func (b *Bundle) ToByteArray() (buffer []byte, err error) {
 	var data = new(bytes.Buffer)
 
 	// Add the '#bundle' string
@@ -395,12 +400,12 @@ func (self *Bundle) ToByteArray() (buffer []byte, err error) {
 	}
 
 	// Add the timetag
-	if _, err = data.Write(self.Timetag.ToByteArray()); err != nil {
+	if _, err = data.Write(b.Timetag.ToByteArray()); err != nil {
 		return nil, err
 	}
 
 	// Process all OSC Messages
-	for _, m := range self.Messages {
+	for _, m := range b.Messages {
 		var msgLen int
 		var msgBuf []byte
 
@@ -416,11 +421,14 @@ func (self *Bundle) ToByteArray() (buffer []byte, err error) {
 		}
 
 		// Append the OSC message
-		data.Write(msgBuf)
+		_, err = data.Write(msgBuf)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Process all OSC Bundles
-	for _, b := range self.Bundles {
+	for _, b := range b.Bundles {
 		var bLen int
 		var bBuf []byte
 
@@ -436,7 +444,10 @@ func (self *Bundle) ToByteArray() (buffer []byte, err error) {
 		}
 
 		// Append the bundle
-		data.Write(bBuf)
+		_, err = data.Write(bBuf)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return data.Bytes(), nil
@@ -455,12 +466,12 @@ func NewClient(ip string, port int) (client *Client) {
 }
 
 // Ip returns the IP address.
-func (client *Client) Ip() string {
+func (client *Client) IP() string {
 	return client.ipaddress
 }
 
 // SetIp sets a new IP address.
-func (client *Client) SetIp(ip string) {
+func (client *Client) SetIP(ip string) {
 	client.ipaddress = ip
 }
 
@@ -491,20 +502,17 @@ func (client *Client) Send(packet Packet) (err error) {
 	if err != nil {
 		return err
 	}
+	defer conn.Close()
 
 	data, err := packet.ToByteArray()
 	if err != nil {
-		conn.Close()
 		return err
 	}
 
 	_, err = conn.Write(data)
 	if err != nil {
-		conn.Close()
 		return err
 	}
-
-	conn.Close()
 
 	return nil
 }
@@ -536,6 +544,8 @@ func (s *Server) ListenAndServe() error {
 	return s.Serve(ln)
 }
 
+// Serve retrieves incoming OSC packets from the given connection and dispatches
+// retreived OSC packets. If something goes wrong an error is returned.
 func (s *Server) Serve(c net.PacketConn) error {
 	var tempDelay time.Duration
 	for {
@@ -562,7 +572,7 @@ func (s *Server) Serve(c net.PacketConn) error {
 	return nil
 }
 
-// Listen listens for incoming OSC packets and returns the packet if one is received.
+// ReceivePacket listens for incoming OSC packets and returns the packet if one is received.
 func (s *Server) ReceivePacket(c net.PacketConn) (packet Packet, err error) {
 	return s.readFromConnection(c)
 }
@@ -570,7 +580,10 @@ func (s *Server) ReceivePacket(c net.PacketConn) (packet Packet, err error) {
 // readFromConnection retrieves OSC packets.
 func (s *Server) readFromConnection(c net.PacketConn) (packet Packet, err error) {
 	if s.ReadTimeout != 0 {
-		c.SetReadDeadline(time.Now().Add(s.ReadTimeout))
+		err = c.SetReadDeadline(time.Now().Add(s.ReadTimeout))
+		if err != nil {
+			return nil, err
+		}
 	}
 	data := make([]byte, 65535)
 	var n, start int
@@ -582,7 +595,7 @@ func (s *Server) readFromConnection(c net.PacketConn) (packet Packet, err error)
 }
 
 // receivePacket receives an OSC packet from the given reader.
-func (self *Server) readPacket(reader *bufio.Reader, start *int, end int) (packet Packet, err error) {
+func (s *Server) readPacket(reader *bufio.Reader, start *int, end int) (packet Packet, err error) {
 	var buf []byte
 	buf, err = reader.Peek(1)
 	if err != nil {
@@ -591,12 +604,12 @@ func (self *Server) readPacket(reader *bufio.Reader, start *int, end int) (packe
 
 	// An OSC Message starts with a '/'
 	if buf[0] == '/' {
-		packet, err = self.readMessage(reader, start)
+		packet, err = s.readMessage(reader, start)
 		if err != nil {
 			return nil, err
 		}
 	} else if buf[0] == '#' { // An OSC bundle starts with a '#'
-		packet, err = self.readBundle(reader, start, end)
+		packet, err = s.readBundle(reader, start, end)
 		if err != nil {
 			return nil, err
 		}
@@ -606,7 +619,7 @@ func (self *Server) readPacket(reader *bufio.Reader, start *int, end int) (packe
 }
 
 // readBundle reads an Bundle from reader.
-func (self *Server) readBundle(reader *bufio.Reader, start *int, end int) (bundle *Bundle, err error) {
+func (s *Server) readBundle(reader *bufio.Reader, start *int, end int) (bundle *Bundle, err error) {
 	// Read the '#bundle' OSC string
 	var startTag string
 	var n int
@@ -616,8 +629,8 @@ func (self *Server) readBundle(reader *bufio.Reader, start *int, end int) (bundl
 	}
 	*start += n
 
-	if startTag != BUNDLE_TAG {
-		return nil, errors.New(fmt.Sprintf("Invalid bundle start tag: %s", startTag))
+	if startTag != bundleTagString {
+		return nil, fmt.Errorf("Invalid bundle start tag: %s", startTag)
 	}
 
 	// Read the timetag
@@ -641,18 +654,21 @@ func (self *Server) readBundle(reader *bufio.Reader, start *int, end int) (bundl
 		}
 
 		var packet Packet
-		packet, err = self.readPacket(reader, start, end)
+		packet, err = s.readPacket(reader, start, end)
 		if err != nil {
 			return nil, err
 		}
-		bundle.Append(packet)
+		err = bundle.Append(packet)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return bundle, nil
 }
 
 // readMessage reads one OSC Message from reader.
-func (self *Server) readMessage(reader *bufio.Reader, start *int) (msg *Message, err error) {
+func (s *Server) readMessage(reader *bufio.Reader, start *int) (msg *Message, err error) {
 	// First, read the OSC address
 	var n int
 	address, n, err := readPaddedString(reader)
@@ -665,7 +681,7 @@ func (self *Server) readMessage(reader *bufio.Reader, start *int) (msg *Message,
 	msg = NewMessage(address)
 
 	// Read all arguments
-	if err = self.readArguments(msg, reader, start); err != nil {
+	if err = s.readArguments(msg, reader, start); err != nil {
 		return nil, err
 	}
 
@@ -673,7 +689,7 @@ func (self *Server) readMessage(reader *bufio.Reader, start *int) (msg *Message,
 }
 
 // readArguments reads all arguments from the reader and adds it to the OSC message.
-func (self *Server) readArguments(msg *Message, reader *bufio.Reader, start *int) error {
+func (s *Server) readArguments(msg *Message, reader *bufio.Reader, start *int) error {
 	// Read the type tag string
 	var n int
 	typetags, n, err := readPaddedString(reader)
@@ -684,7 +700,7 @@ func (self *Server) readArguments(msg *Message, reader *bufio.Reader, start *int
 
 	// If the typetag doesn't start with ',', it's not valid
 	if typetags[0] != ',' {
-		return errors.New("Unsupported type tag string")
+		return errors.New("unsupported type tag string")
 	}
 
 	// Remove ',' from the type tag
@@ -693,7 +709,7 @@ func (self *Server) readArguments(msg *Message, reader *bufio.Reader, start *int
 	for _, c := range typetags {
 		switch c {
 		default:
-			return errors.New(fmt.Sprintf("Unsupported type tag: %c", c))
+			return fmt.Errorf("unsupported type tag: %c", c)
 
 		// int32
 		case 'i':
@@ -792,49 +808,49 @@ func NewTimetagFromTimetag(timetag uint64) (t *Timetag) {
 }
 
 // Time returns the time.
-func (self *Timetag) Time() time.Time {
-	return self.time
+func (t *Timetag) Time() time.Time {
+	return t.time
 }
 
 // FractionalSecond returns the last 32 bits of the Osc Time Tag. Specifies the
 // fractional part of a second.
-func (self *Timetag) FractionalSecond() uint32 {
-	return uint32(self.timeTag << 32)
+func (t *Timetag) FractionalSecond() uint32 {
+	return uint32(t.timeTag << 32)
 }
 
 // SecondsSinceEpoch returns the first 32 bits (the number of seconds since the
 // midnight 1900) from the OSC timetag.
-func (self *Timetag) SecondsSinceEpoch() uint32 {
-	return uint32(self.timeTag >> 32)
+func (t *Timetag) SecondsSinceEpoch() uint32 {
+	return uint32(t.timeTag >> 32)
 }
 
 // TimeTag returns the time tag value
-func (self *Timetag) TimeTag() uint64 {
-	return self.timeTag
+func (t *Timetag) TimeTag() uint64 {
+	return t.timeTag
 }
 
 // ToByteArray converts the OSC Time Tag to a byte array.
-func (self *Timetag) ToByteArray() []byte {
+func (t *Timetag) ToByteArray() []byte {
 	var data = new(bytes.Buffer)
-	binary.Write(data, binary.BigEndian, self.timeTag)
+	binary.Write(data, binary.BigEndian, t.timeTag)
 	return data.Bytes()
 }
 
 // SetTime sets the value of the OSC Time Tag.
-func (self *Timetag) SetTime(time time.Time) {
-	self.time = time
-	self.timeTag = timeToTimetag(time)
+func (t *Timetag) SetTime(time time.Time) {
+	t.time = time
+	t.timeTag = timeToTimetag(time)
 }
 
 // ExpiresIn calculates the number of seconds until the current time is the
 // same as the value of the timetag. It returns zero if the value of the
 // timetag is in the past.
-func (self *Timetag) ExpiresIn() time.Duration {
-	if self.timeTag <= 1 {
+func (t *Timetag) ExpiresIn() time.Duration {
+	if t.timeTag <= 1 {
 		return 0
 	}
 
-	tt := timetagToTime(self.timeTag)
+	tt := timetagToTime(t.timeTag)
 	seconds := tt.Sub(time.Now())
 
 	if seconds <= 0 {
@@ -987,7 +1003,7 @@ func timetagToTime(timetag uint64) (t time.Time) {
 // Utility and helper functions
 ////
 
-// PrintMessages pretty prints a Message to the standard output.
+// PrintMessage pretty prints an OSC message to the standard output.
 func PrintMessage(msg *Message) {
 	tags, err := msg.TypeTags()
 	if err != nil {
@@ -1023,9 +1039,9 @@ func PrintMessage(msg *Message) {
 	fmt.Println(fmt.Sprintf(formatString, arguments...))
 }
 
-// existsAddress returns true if the address s is found in handlers. Otherwise, false.
+// existsAddress returns true if the OSC address s is found in handlers. Otherwise, false.
 func existsAddress(s string, handlers map[string]Handler) bool {
-	for address, _ := range handlers {
+	for address := range handlers {
 		if address == s {
 			return true
 		}
@@ -1053,7 +1069,7 @@ func getRegEx(pattern string) *regexp.Regexp {
 func getTypeTag(arg interface{}) (s string, err error) {
 	switch t := arg.(type) {
 	default:
-		return "", errors.New(fmt.Sprintf("Unsupported type: %T", t))
+		return "", fmt.Errorf("Unsupported type: %T", t)
 
 	case bool:
 		if arg.(bool) {
