@@ -9,7 +9,6 @@ import (
 	"github.com/hypebeast/go-osc/osc"
 )
 
-// TODO: Revise the server
 func main() {
 	addr := "127.0.0.1:8765"
 	server := &osc.Server{}
