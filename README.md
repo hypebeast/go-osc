@@ -35,7 +35,7 @@
 ### Client
 
 ```go
-import osc "github.com/hypebeast/go-osc"
+import osc "github.com/kward/go-osc"
 
 func main() {
     client := osc.NewClient("localhost", 8765)
