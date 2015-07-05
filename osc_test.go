@@ -3,10 +3,14 @@ package osc
 import (
 	"bufio"
 	"bytes"
+	"log"
 	"net"
+	"os"
 	"sync"
 	"testing"
 	"time"
+
+	"golang.org/x/net/context"
 )
 
 func TestAppendArguments(t *testing.T) {
@@ -88,7 +92,7 @@ func TestServerMessageDispatching(t *testing.T) {
 		}
 
 		start <- true
-		server.Serve(conn)
+		server.Serve(context.Background(), conn)
 	}()
 
 	go func() {
@@ -132,8 +136,7 @@ func TestServerMessageReceiving(t *testing.T) {
 
 		// Start the client
 		start <- true
-
-		packet, err := server.ReceivePacket(c)
+		packet, err := server.ReceivePacket(context.Background(), c)
 		if err != nil {
 			t.Error("Server error")
 		}
@@ -214,7 +217,10 @@ func TestReadTimeout(t *testing.T) {
 	go func() {
 		defer wg.Done()
 
-		server := &Server{ReadTimeout: 100 * time.Millisecond}
+		var ctx context.Context
+		timeout := 100 * time.Millisecond
+
+		server := &Server{}
 		c, err := net.ListenPacket("udp", "localhost:6677")
 		if err != nil {
 			t.Fatal(err)
@@ -222,7 +228,8 @@ func TestReadTimeout(t *testing.T) {
 		defer c.Close()
 
 		start <- true
-		p, err := server.ReceivePacket(c)
+		ctx, _ = context.WithTimeout(context.Background(), timeout)
+		p, err := server.ReceivePacket(ctx, c)
 		if err != nil {
 			t.Fatal("server error:", err)
 			return
@@ -232,14 +239,16 @@ func TestReadTimeout(t *testing.T) {
 		}
 
 		// Second receive should time out since client is delayed 150 milliseconds
-		_, err = server.ReceivePacket(c)
+		ctx, _ = context.WithTimeout(context.Background(), timeout)
+		_, err = server.ReceivePacket(ctx, c)
 		if err == nil {
 			t.Fatal("expected error")
 			return
 		}
 
 		// Next receive should get it
-		p, err = server.ReceivePacket(c)
+		ctx, _ = context.WithTimeout(context.Background(), timeout)
+		p, err = server.ReceivePacket(ctx, c)
 		if err != nil {
 			t.Fatalf("server error:", err)
 		}
@@ -364,4 +373,9 @@ func TestClientSetLocalAddr(t *testing.T) {
 	if client.laddr.String() != expectedAddr {
 		t.Errorf("Expected laddr to be %s but was %s", expectedAddr, client.laddr.String())
 	}
+}
+
+func TestMain(m *testing.M) {
+	log.SetFlags(log.Flags() | log.Lshortfile)
+	os.Exit(m.Run())
 }

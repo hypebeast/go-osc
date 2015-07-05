@@ -8,10 +8,13 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"regexp"
 	"strings"
 	"time"
+
+	"golang.org/x/net/context"
 )
 
 const (
@@ -52,9 +55,8 @@ type Client struct {
 // Server represents an OSC server. The server listens on Address and Port for
 // incoming OSC packets and bundles.
 type Server struct {
-	Addr        string
-	Dispatcher  *OscDispatcher
-	ReadTimeout time.Duration
+	Addr       string
+	Dispatcher *OscDispatcher
 }
 
 // Timetag represents an OSC Time Tag.
@@ -541,12 +543,12 @@ func (s *Server) ListenAndServe() error {
 	if err != nil {
 		return err
 	}
-	return s.Serve(ln)
+	return s.Serve(context.Background(), ln)
 }
 
 // Serve retrieves incoming OSC packets from the given connection and dispatches
 // retreived OSC packets. If something goes wrong an error is returned.
-func (s *Server) Serve(c net.PacketConn) error {
+func (s *Server) Serve(ctx context.Context, c net.PacketConn) error {
 	var tempDelay time.Duration
 
 	if s.Dispatcher == nil {
@@ -554,7 +556,7 @@ func (s *Server) Serve(c net.PacketConn) error {
 	}
 
 	for {
-		msg, err := s.readFromConnection(c)
+		msg, err := s.ReceivePacket(ctx, c)
 		if err != nil {
 			if ne, ok := err.(net.Error); ok && ne.Temporary() {
 				if tempDelay == 0 {
@@ -577,19 +579,24 @@ func (s *Server) Serve(c net.PacketConn) error {
 	return nil
 }
 
-// ReceivePacket listens for incoming OSC packets and returns the packet if one is received.
-func (s *Server) ReceivePacket(c net.PacketConn) (packet Packet, err error) {
-	return s.readFromConnection(c)
-}
-
-// readFromConnection retrieves OSC packets.
-func (s *Server) readFromConnection(c net.PacketConn) (packet Packet, err error) {
-	if s.ReadTimeout != 0 {
-		err = c.SetReadDeadline(time.Now().Add(s.ReadTimeout))
-		if err != nil {
+// ReceivePacket listens for incoming OSC packets and returns the packet if one
+// is received.
+func (s *Server) ReceivePacket(ctx context.Context, c net.PacketConn) (packet Packet, err error) {
+	if deadline, ok := ctx.Deadline(); ok {
+		if err := c.SetReadDeadline(deadline); err != nil {
 			return nil, err
 		}
 	}
+
+	go func() {
+		select {
+		// case <-time.After(200 * time.Millisecond):
+		// 	log.Println("Overslept.")
+		case <-ctx.Done():
+			log.Println(ctx.Err())
+		}
+	}()
+
 	data := make([]byte, 65535)
 	var n, start int
 	n, _, err = c.ReadFrom(data)
