@@ -7,6 +7,7 @@ import (
 	"os"
 
 	osc "github.com/kward/go-osc"
+	"golang.org/x/net/context"
 )
 
 func main() {
@@ -25,7 +26,7 @@ func main() {
 		fmt.Println("Start listening on", addr)
 
 		for {
-			packet, err := server.ReceivePacket(conn)
+			packet, err := server.ReceivePacket(context.Background(), conn)
 			if err != nil {
 				fmt.Println("Server error: " + err.Error())
 				os.Exit(1)
