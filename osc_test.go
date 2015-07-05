@@ -62,7 +62,7 @@ func TestHandleWithInvalidAddress(t *testing.T) {
 func TestServerMessageDispatching(t *testing.T) {
 	finish := make(chan bool)
 	start := make(chan bool)
-	var done sync.WaitGroup
+	done := sync.WaitGroup{}
 	done.Add(2)
 
 	// Start the OSC server in a new go-routine
@@ -122,7 +122,7 @@ func TestServerMessageDispatching(t *testing.T) {
 func TestServerMessageReceiving(t *testing.T) {
 	finish := make(chan bool)
 	start := make(chan bool)
-	var done sync.WaitGroup
+	done := sync.WaitGroup{}
 	done.Add(2)
 
 	// Start the server in a go-routine
@@ -189,7 +189,7 @@ func TestServerMessageReceiving(t *testing.T) {
 
 func TestReadTimeout(t *testing.T) {
 	start := make(chan bool)
-	var wg sync.WaitGroup
+	wg := sync.WaitGroup{}
 	wg.Add(2)
 
 	go func() {
