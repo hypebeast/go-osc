@@ -26,7 +26,7 @@ func main() {
 		fmt.Println("Start listening on", addr)
 
 		for {
-			packet, err := server.ReceivePacket(context.Background(), conn)
+			packet, remote, err := server.ReceivePacket(context.Background(), conn)
 			if err != nil {
 				fmt.Println("Server error: " + err.Error())
 				os.Exit(1)
@@ -38,11 +38,11 @@ func main() {
 					fmt.Println("Unknown packet type!")
 
 				case *osc.Message:
-					fmt.Printf("-- OSC Message: ")
+					fmt.Printf("-- OSC Message from %v: ", remote)
 					osc.PrintMessage(packet.(*osc.Message))
 
 				case *osc.Bundle:
-					fmt.Println("-- OSC Bundle:")
+					fmt.Println("-- OSC Bundle from %v:", remote)
 					bundle := packet.(*osc.Bundle)
 					for i, message := range bundle.Messages {
 						fmt.Printf("  -- OSC Message #%d: ", i+1)

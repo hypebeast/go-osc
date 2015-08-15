@@ -74,7 +74,9 @@ type Timetag struct {
 // Dispatcher is an interface for an OSC message dispatcher. A dispatcher is
 // responsible for dispatching received OSC messages.
 type Dispatcher interface {
-	Dispatch(packet Packet)
+	// Dispatch accepts a packet to dispatch, and the address of the client that
+	// sent the packet.
+	Dispatch(packet Packet, addr net.Addr)
 }
 
 // Handler is an interface for message handlers. Every handler implementation for
@@ -125,7 +127,7 @@ func (s *OscDispatcher) AddMsgHandler(address string, handler HandlerFunc) error
 }
 
 // Dispatch dispatches OSC packets. Implements the Dispatcher interface.
-func (s *OscDispatcher) Dispatch(packet Packet) {
+func (s *OscDispatcher) Dispatch(packet Packet, addr net.Addr) {
 	switch packet.(type) {
 	default:
 		return
@@ -154,7 +156,7 @@ func (s *OscDispatcher) Dispatch(packet Packet) {
 
 			// Process all bundles
 			for _, b := range bundle.Bundles {
-				s.Dispatch(b)
+				s.Dispatch(b, addr)
 			}
 		}()
 	}
@@ -547,7 +549,7 @@ func (s *Server) ListenAndServe() error {
 }
 
 // Serve retrieves incoming OSC packets from the given connection and dispatches
-// retreived OSC packets. If something goes wrong an error is returned.
+// retrieved OSC packets. If something goes wrong an error is returned.
 func (s *Server) Serve(ctx context.Context, c net.PacketConn) error {
 	var tempDelay time.Duration
 
@@ -556,8 +558,9 @@ func (s *Server) Serve(ctx context.Context, c net.PacketConn) error {
 	}
 
 	for {
-		msg, err := s.ReceivePacket(ctx, c)
+		msg, addr, err := s.ReceivePacket(ctx, c)
 		if err != nil {
+			// Attempt exponential back-off during temporary network problems.
 			if ne, ok := err.(net.Error); ok && ne.Temporary() {
 				if tempDelay == 0 {
 					tempDelay = 5 * time.Millisecond
@@ -568,23 +571,23 @@ func (s *Server) Serve(ctx context.Context, c net.PacketConn) error {
 					tempDelay = max
 				}
 				time.Sleep(tempDelay)
-				continue
+				continue // Try again.
 			}
-			return err
+			return err // Error is not temporary.
 		}
 		tempDelay = 0
-		go s.Dispatcher.Dispatch(msg)
+		go s.Dispatcher.Dispatch(msg, addr)
 	}
 
 	return nil
 }
 
-// ReceivePacket listens for incoming OSC packets and returns the packet if one
-// is received.
-func (s *Server) ReceivePacket(ctx context.Context, c net.PacketConn) (packet Packet, err error) {
+// ReceivePacket listens for incoming OSC packets and returns the packet and
+// client address if one is received.
+func (s *Server) ReceivePacket(ctx context.Context, c net.PacketConn) (Packet, net.Addr, error) {
 	if deadline, ok := ctx.Deadline(); ok {
 		if err := c.SetReadDeadline(deadline); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
@@ -599,11 +602,12 @@ func (s *Server) ReceivePacket(ctx context.Context, c net.PacketConn) (packet Pa
 
 	data := make([]byte, 65535)
 	var n, start int
-	n, _, err = c.ReadFrom(data)
+	n, addr, err := c.ReadFrom(data)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return s.readPacket(bufio.NewReader(bytes.NewBuffer(data)), &start, n)
+	pkt, err := s.readPacket(bufio.NewReader(bytes.NewBuffer(data)), &start, n)
+	return pkt, addr, err
 }
 
 // receivePacket receives an OSC packet from the given reader.

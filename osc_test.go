@@ -136,30 +136,32 @@ func TestServerMessageReceiving(t *testing.T) {
 
 		// Start the client
 		start <- true
-		packet, err := server.ReceivePacket(context.Background(), c)
+		packet, addr, err := server.ReceivePacket(context.Background(), c)
 		if err != nil {
 			t.Error("Server error")
+			return
 		}
 		if packet == nil {
 			t.Error("nil packet")
+			return
 		}
-		if packet != nil {
-			msg := packet.(*Message)
-			if msg.CountArguments() != 2 {
-				t.Errorf("Argument length should be 2 and is: %d\n", msg.CountArguments())
-			}
-
-			if msg.Arguments[0].(int32) != 1122 {
-				t.Error("Argument should be 1122 and is: " + string(msg.Arguments[0].(int32)))
-			}
-
-			if msg.Arguments[1].(int32) != 3344 {
-				t.Error("Argument should be 3344 and is: " + string(msg.Arguments[1].(int32)))
-			}
-
-			c.Close()
-			finish <- true
+		msg := packet.(*Message)
+		if msg.CountArguments() != 2 {
+			t.Errorf("Argument length should be 2 and is: %d\n", msg.CountArguments())
 		}
+		if msg.Arguments[0].(int32) != 1122 {
+			t.Error("Argument should be 1122 and is: " + string(msg.Arguments[0].(int32)))
+		}
+		if msg.Arguments[1].(int32) != 3344 {
+			t.Error("Argument should be 3344 and is: " + string(msg.Arguments[1].(int32)))
+		}
+
+		if addr == nil {
+			t.Error("addr was empty")
+		}
+
+		c.Close()
+		finish <- true
 	}()
 
 	go func() {
@@ -229,31 +231,37 @@ func TestReadTimeout(t *testing.T) {
 
 		start <- true
 		ctx, _ = context.WithTimeout(context.Background(), timeout)
-		p, err := server.ReceivePacket(ctx, c)
+		p, addr, err := server.ReceivePacket(ctx, c)
 		if err != nil {
-			t.Fatal("server error:", err)
+			t.Errorf("Server error: %v", err)
 			return
 		}
-		if a := p.(*Message).Address; a != "/address/test1" {
-			t.Fatalf("wrong address, got %s want %s", a, "/address/test1")
+		if got, want := p.(*Message).Address, "/address/test1"; got != want {
+			t.Errorf("Wrong address; got = %s want = %s", got, want)
+		}
+		if addr == nil {
+			t.Errorf("Addr was nil")
 		}
 
 		// Second receive should time out since client is delayed 150 milliseconds
 		ctx, _ = context.WithTimeout(context.Background(), timeout)
-		_, err = server.ReceivePacket(ctx, c)
-		if err == nil {
-			t.Fatal("expected error")
+		if _, _, err = server.ReceivePacket(ctx, c); err == nil {
+			t.Errorf("Expected error")
 			return
 		}
 
 		// Next receive should get it
 		ctx, _ = context.WithTimeout(context.Background(), timeout)
-		p, err = server.ReceivePacket(ctx, c)
+		p, addr, err = server.ReceivePacket(ctx, c)
 		if err != nil {
-			t.Fatalf("server error:", err)
+			t.Errorf("Server error: %v", err)
+			return
 		}
-		if a := p.(*Message).Address; a != "/address/test2" {
-			t.Fatalf("wrong address, got %s want %s", a, "/address/test2")
+		if got, want := p.(*Message).Address, "/address/test2"; got != want {
+			t.Errorf("Wrong address; got = %s, want = %s", got, want)
+		}
+		if addr == nil {
+			t.Errorf("Addr was nil")
 		}
 	}()
 
