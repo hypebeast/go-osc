@@ -640,11 +640,11 @@ func (s *Server) readFromConnection(c net.PacketConn) (packet Packet, err error)
 	if err != nil {
 		return nil, err
 	}
-	return s.readPacket(bufio.NewReader(bytes.NewBuffer(data)), &start, n)
+	return readPacket(bufio.NewReader(bytes.NewBuffer(data)), &start, n)
 }
 
 // receivePacket receives an OSC packet from the given reader.
-func (s *Server) readPacket(reader *bufio.Reader, start *int, end int) (packet Packet, err error) {
+func readPacket(reader *bufio.Reader, start *int, end int) (packet Packet, err error) {
 	var buf []byte
 	buf, err = reader.Peek(1)
 	if err != nil {
@@ -653,12 +653,12 @@ func (s *Server) readPacket(reader *bufio.Reader, start *int, end int) (packet P
 
 	// An OSC Message starts with a '/'
 	if buf[0] == '/' {
-		packet, err = s.readMessage(reader, start)
+		packet, err = readMessage(reader, start)
 		if err != nil {
 			return nil, err
 		}
 	} else if buf[0] == '#' { // An OSC bundle starts with a '#'
-		packet, err = s.readBundle(reader, start, end)
+		packet, err = readBundle(reader, start, end)
 		if err != nil {
 			return nil, err
 		}
@@ -668,7 +668,7 @@ func (s *Server) readPacket(reader *bufio.Reader, start *int, end int) (packet P
 }
 
 // readBundle reads an Bundle from reader.
-func (s *Server) readBundle(reader *bufio.Reader, start *int, end int) (bundle *Bundle, err error) {
+func readBundle(reader *bufio.Reader, start *int, end int) (bundle *Bundle, err error) {
 	// Read the '#bundle' OSC string
 	var startTag string
 	var n int
@@ -703,7 +703,7 @@ func (s *Server) readBundle(reader *bufio.Reader, start *int, end int) (bundle *
 		}
 
 		var packet Packet
-		packet, err = s.readPacket(reader, start, end)
+		packet, err = readPacket(reader, start, end)
 		if err != nil {
 			return nil, err
 		}
@@ -717,7 +717,7 @@ func (s *Server) readBundle(reader *bufio.Reader, start *int, end int) (bundle *
 }
 
 // readMessage reads one OSC Message from reader.
-func (s *Server) readMessage(reader *bufio.Reader, start *int) (msg *Message, err error) {
+func readMessage(reader *bufio.Reader, start *int) (msg *Message, err error) {
 	// First, read the OSC address
 	var n int
 	address, n, err := readPaddedString(reader)
@@ -730,7 +730,7 @@ func (s *Server) readMessage(reader *bufio.Reader, start *int) (msg *Message, er
 	msg = NewMessage(address)
 
 	// Read all arguments
-	if err = s.readArguments(msg, reader, start); err != nil {
+	if err = readArguments(msg, reader, start); err != nil {
 		return nil, err
 	}
 
@@ -738,7 +738,7 @@ func (s *Server) readMessage(reader *bufio.Reader, start *int) (msg *Message, er
 }
 
 // readArguments reads all arguments from the reader and adds it to the OSC message.
-func (s *Server) readArguments(msg *Message, reader *bufio.Reader, start *int) error {
+func readArguments(msg *Message, reader *bufio.Reader, start *int) error {
 	// Read the type tag string
 	var n int
 	typetags, n, err := readPaddedString(reader)
