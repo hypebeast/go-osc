@@ -643,6 +643,12 @@ func (s *Server) readFromConnection(c net.PacketConn) (packet Packet, err error)
 	return readPacket(bufio.NewReader(bytes.NewBuffer(data)), &start, n)
 }
 
+func ParsePacket(msgString string) (packet Packet, err error) {
+	var start int
+	return readPacket(bufio.NewReader(bytes.NewBufferString(msgString)), &start, len(msgString))
+}
+
+
 // receivePacket receives an OSC packet from the given reader.
 func readPacket(reader *bufio.Reader, start *int, end int) (packet Packet, err error) {
 	var buf []byte
