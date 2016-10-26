@@ -268,8 +268,7 @@ func (msg *Message) String() string {
 
 	var formatString string
 	var arguments []interface{}
-	formatString += "%s %s"
-	arguments = append(arguments, msg.Address)
+	formatString += "%s"
 	arguments = append(arguments, tags)
 
 	for _, arg := range msg.Arguments {
@@ -545,25 +544,36 @@ func (client *Client) SetLocalAddr(ip string, port int) error {
 }
 
 // Send sends an OSC Bundle or an OSC Message.
-func (client *Client) Send(packet Packet) (err error) {
+func (client *Client) Send(packet Packet) (ret *Message, err error) {
 	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", client.ipaddress, client.port))
 	conn, err := net.DialUDP("udp", client.laddr, addr)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer conn.Close()
 
 	data, err := packet.MarshalBinary()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	_, err = conn.Write(data)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	var start int
+	buf := make([]byte, 65535)
+	_, err = conn.Read(buf)
+	if err != nil {
+		return nil, err
+	}
+
+	msg, err := readMessage(bufio.NewReader(bytes.NewReader(buf)), &start)
+	if err != nil {
+		return nil, err
+	}
+	return msg, nil
 }
 
 ////
@@ -647,7 +657,6 @@ func ParsePacket(msgString string) (packet Packet, err error) {
 	var start int
 	return readPacket(bufio.NewReader(bytes.NewBufferString(msgString)), &start, len(msgString))
 }
-
 
 // receivePacket receives an OSC packet from the given reader.
 func readPacket(reader *bufio.Reader, start *int, end int) (packet Packet, err error) {
