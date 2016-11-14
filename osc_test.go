@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -269,35 +270,25 @@ func TestReadTimeout(t *testing.T) {
 }
 
 func TestReadPaddedString(t *testing.T) {
-	buf1 := []byte{'t', 'e', 's', 't', 's', 't', 'r', 'i', 'n', 'g', 0, 0}
-	buf2 := []byte{'t', 'e', 's', 't', 0, 0, 0, 0}
-
-	bytesBuffer := bytes.NewBuffer(buf1)
-	st, n, err := readPaddedString(bufio.NewReader(bytesBuffer))
-	if err != nil {
-		t.Error("Error reading padded string: " + err.Error())
-	}
-
-	if n != 12 {
-		t.Errorf("Number of bytes needs to be 12 and is: %d\n", n)
-	}
-
-	if st != "teststring" {
-		t.Errorf("String should be \"teststring\" and is \"%s\"", st)
-	}
-
-	bytesBuffer = bytes.NewBuffer(buf2)
-	st, n, err = readPaddedString(bufio.NewReader(bytesBuffer))
-	if err != nil {
-		t.Error("Error reading padded string: " + err.Error())
-	}
-
-	if n != 8 {
-		t.Errorf("Number of bytes needs to be 8 and is: %d\n", n)
-	}
-
-	if st != "test" {
-		t.Errorf("String should be \"test\" and is \"%s\"", st)
+	for _, tt := range []struct {
+		buf []byte // buffer
+		n   int    // bytes needed
+		s   string // resulting string
+	}{
+		{[]byte{'t', 'e', 's', 't', 's', 't', 'r', 'i', 'n', 'g', 0, 0}, 12, "teststring"},
+		{[]byte{'t', 'e', 's', 't', 0, 0, 0, 0}, 8, "test"},
+	} {
+		buf := bytes.NewBuffer(tt.buf)
+		s, n, err := readPaddedString(bufio.NewReader(buf))
+		if err != nil {
+			t.Errorf("%s: Error reading padded string: %s", s, err)
+		}
+		if got, want := n, tt.n; got != want {
+			t.Errorf("%s: Bytes needed don't match; got = %d, want = %d", tt.s, got, want)
+		}
+		if got, want := s, tt.s; got != want {
+			t.Errorf("%s: Strings don't match; got = %d, want = %d", tt.s, got, want)
+		}
 	}
 }
 
@@ -381,6 +372,71 @@ func TestClientSetLocalAddr(t *testing.T) {
 	if client.laddr.String() != expectedAddr {
 		t.Errorf("Expected laddr to be %s but was %s", expectedAddr, client.laddr.String())
 	}
+}
+
+func TestParsePacket(t *testing.T) {
+	for _, tt := range []struct {
+		desc string
+		msg  string
+		pkt  Packet
+		ok   bool
+	}{
+		{"no_args",
+			"/a/b/c" + nulls(2) + "," + nulls(3),
+			makePacket("/a/b/c", nil),
+			true},
+		{"string_arg",
+			"/d/e/f" + nulls(2) + ",s" + nulls(2) + "foo" + nulls(1),
+			makePacket("/d/e/f", []string{"foo"}),
+			true},
+		{"empty", "", nil, false},
+	} {
+		pkt, err := ParsePacket(tt.msg)
+		if err != nil && tt.ok {
+			t.Errorf("%s: ParsePacket() returned unexpected error; %s", tt.desc, err)
+		}
+		if err == nil && !tt.ok {
+			t.Errorf("%s: ParsePacket() expected error", tt.desc)
+		}
+		if !tt.ok {
+			continue
+		}
+
+		pktBytes, err := pkt.ToByteArray()
+		if err != nil {
+			t.Errorf("%s: failure converting pkt to byte array; %s", tt.desc, err)
+			continue
+		}
+		ttpktBytes, err := tt.pkt.ToByteArray()
+		if err != nil {
+			t.Errorf("%s: failure converting tt.pkt to byte array; %s", tt.desc, err)
+			continue
+		}
+		if got, want := pktBytes, ttpktBytes; !reflect.DeepEqual(got, want) {
+			t.Errorf("%s: ParsePacket() as bytes = '%s', want = '%s'", tt.desc, got, want)
+			continue
+		}
+	}
+}
+
+const zero = string(byte(0))
+
+// nulls returns a string of `i` nulls.
+func nulls(i int) string {
+	s := ""
+	for j := 0; j < i; j++ {
+		s += zero
+	}
+	return s
+}
+
+// makePacket creates a fake Message Packet.
+func makePacket(addr string, args []string) Packet {
+	msg := NewMessage(addr)
+	for _, arg := range args {
+		msg.Append(arg)
+	}
+	return msg
 }
 
 func TestMain(m *testing.M) {
