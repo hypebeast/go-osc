@@ -240,8 +240,12 @@ func (msg *Message) Match(address string) bool {
 }
 
 // TypeTags returns the type tag string.
-func (msg *Message) TypeTags() (tags string, err error) {
-	tags = ","
+func (msg *Message) TypeTags() (string, error) {
+	if msg == nil {
+		return "", fmt.Errorf("message is nil")
+	}
+
+	tags := ","
 	for _, m := range msg.Arguments {
 		s, err := getTypeTag(m)
 		if err != nil {
@@ -255,6 +259,10 @@ func (msg *Message) TypeTags() (tags string, err error) {
 
 // String implements the fmt.Stringer interface.
 func (msg *Message) String() string {
+	if msg == nil {
+		return ""
+	}
+
 	tags, err := msg.TypeTags()
 	if err != nil {
 		return ""
@@ -1058,6 +1066,11 @@ func timetagToTime(timetag uint64) (t time.Time) {
 ////
 // Utility and helper functions
 ////
+
+// PrintMessage pretty prints an OSC message to the standard output.
+func PrintMessage(msg *Message) {
+	fmt.Println(msg)
+}
 
 // existsAddress returns true if the OSC address s is found in handlers. Otherwise, false.
 func existsAddress(s string, handlers map[string]Handler) bool {
