@@ -5,6 +5,7 @@ package osc
 import (
 	"bufio"
 	"bytes"
+	"encoding"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -24,7 +25,7 @@ const (
 
 // Packet is the interface for Message and Bundle.
 type Packet interface {
-	ToByteArray() (buffer []byte, err error)
+	encoding.BinaryMarshaler
 }
 
 // Message represents a single OSC message. An OSC message consists of an OSC address
@@ -257,17 +258,15 @@ func (msg *Message) CountArguments() int {
 	return len(msg.Arguments)
 }
 
-// ToByteArray serializes the OSC message to a byte buffer. The byte buffer
+// MarshalBinary serializes the OSC message to a byte buffer. The byte buffer
 // has the following format:
 // 1. OSC Address Pattern
 // 2. OSC Type Tag String
 // 3. OSC Arguments
-func (msg *Message) ToByteArray() (buffer []byte, err error) {
-	// The byte buffer for the message
-	var data = new(bytes.Buffer)
-
+func (msg *Message) MarshalBinary() ([]byte, error) {
 	// We can start with the OSC address and add it to the buffer
-	_, err = writePaddedString(msg.Address, data)
+	data := new(bytes.Buffer)
+	_, err := writePaddedString(msg.Address, data)
 	if err != nil {
 		return nil, err
 	}
@@ -276,7 +275,7 @@ func (msg *Message) ToByteArray() (buffer []byte, err error) {
 	typetags := []byte{','}
 
 	// Process the type tags and collect all arguments
-	var payload = new(bytes.Buffer)
+	payload := new(bytes.Buffer)
 	for _, arg := range msg.Arguments {
 		// FIXME: Use t instead of arg
 		switch t := arg.(type) {
@@ -387,18 +386,19 @@ func (b *Bundle) Append(pck Packet) (err error) {
 	return nil
 }
 
-// ToByteArray serializes the OSC bundle to a byte array with the following format:
+// MarshalBinary serializes the OSC bundle to a byte array with the following
+// format:
 // 1. Bundle string: '#bundle'
 // 2. OSC timetag
 // 3. Length of first OSC bundle element
 // 4. First bundle element
 // 5. Length of n OSC bundle element
 // 6. n bundle element
-func (b *Bundle) ToByteArray() (buffer []byte, err error) {
-	var data = new(bytes.Buffer)
+func (b *Bundle) MarshalBinary() ([]byte, error) {
+	data := new(bytes.Buffer)
 
 	// Add the '#bundle' string
-	_, err = writePaddedString("#bundle", data)
+	_, err := writePaddedString("#bundle", data)
 	if err != nil {
 		return nil, err
 	}
@@ -413,7 +413,7 @@ func (b *Bundle) ToByteArray() (buffer []byte, err error) {
 		var msgLen int
 		var msgBuf []byte
 
-		msgBuf, err = m.ToByteArray()
+		msgBuf, err = m.MarshalBinary()
 		if err != nil {
 			return nil, err
 		}
@@ -436,7 +436,7 @@ func (b *Bundle) ToByteArray() (buffer []byte, err error) {
 		var bLen int
 		var bBuf []byte
 
-		bBuf, err = b.ToByteArray()
+		bBuf, err = b.MarshalBinary()
 		if err != nil {
 			return nil, err
 		}
@@ -508,7 +508,7 @@ func (client *Client) Send(packet Packet) (err error) {
 	}
 	defer conn.Close()
 
-	data, err := packet.ToByteArray()
+	data, err := packet.MarshalBinary()
 	if err != nil {
 		return err
 	}

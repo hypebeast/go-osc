@@ -402,12 +402,12 @@ func TestParsePacket(t *testing.T) {
 			continue
 		}
 
-		pktBytes, err := pkt.ToByteArray()
+		pktBytes, err := pkt.MarshalBinary()
 		if err != nil {
 			t.Errorf("%s: failure converting pkt to byte array; %s", tt.desc, err)
 			continue
 		}
-		ttpktBytes, err := tt.pkt.ToByteArray()
+		ttpktBytes, err := tt.pkt.MarshalBinary()
 		if err != nil {
 			t.Errorf("%s: failure converting tt.pkt to byte array; %s", tt.desc, err)
 			continue
