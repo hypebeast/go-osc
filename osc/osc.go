@@ -9,13 +9,10 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"regexp"
 	"strings"
 	"time"
-
-	"golang.org/x/net/context"
 )
 
 const (
@@ -56,8 +53,9 @@ type Client struct {
 // Server represents an OSC server. The server listens on Address and Port for
 // incoming OSC packets and bundles.
 type Server struct {
-	Addr       string
-	Dispatcher *OscDispatcher
+	Addr        string
+	Dispatcher  *OscDispatcher
+	ReadTimeout time.Duration
 }
 
 // Timetag represents an OSC Time Tag.
@@ -75,9 +73,7 @@ type Timetag struct {
 // Dispatcher is an interface for an OSC message dispatcher. A dispatcher is
 // responsible for dispatching received OSC messages.
 type Dispatcher interface {
-	// Dispatch accepts a packet to dispatch, and the address of the client that
-	// sent the packet.
-	Dispatch(packet Packet, addr net.Addr)
+	Dispatch(packet Packet)
 }
 
 // Handler is an interface for message handlers. Every handler implementation for
@@ -102,7 +98,8 @@ func (f HandlerFunc) HandleMessage(msg *Message) {
 // OscDispatcher is a dispatcher for OSC packets. It handles the dispatching of
 // received OSC packets.
 type OscDispatcher struct {
-	handlers map[string]Handler
+	handlers       map[string]Handler
+	defaultHandler Handler
 }
 
 // NewOscDispatcher returns an OscDispatcher.
@@ -112,6 +109,10 @@ func NewOscDispatcher() (dispatcher *OscDispatcher) {
 
 // AddMsgHandler adds a new message handler for the given OSC address.
 func (s *OscDispatcher) AddMsgHandler(address string, handler HandlerFunc) error {
+	if address == "*" {
+		s.defaultHandler = handler
+		return nil
+	}
 	for _, chr := range "*?,[]{}# " {
 		if strings.Contains(address, fmt.Sprintf("%c", chr)) {
 			return errors.New("OSC Address string may not contain any characters in \"*?,[]{}# \n")
@@ -128,7 +129,7 @@ func (s *OscDispatcher) AddMsgHandler(address string, handler HandlerFunc) error
 }
 
 // Dispatch dispatches OSC packets. Implements the Dispatcher interface.
-func (s *OscDispatcher) Dispatch(packet Packet, addr net.Addr) {
+func (s *OscDispatcher) Dispatch(packet Packet) {
 	switch packet.(type) {
 	default:
 		return
@@ -139,6 +140,9 @@ func (s *OscDispatcher) Dispatch(packet Packet, addr net.Addr) {
 			if msg.Match(address) {
 				handler.HandleMessage(msg)
 			}
+		}
+		if s.defaultHandler != nil {
+			s.defaultHandler.HandleMessage(msg)
 		}
 
 	case *Bundle:
@@ -153,11 +157,14 @@ func (s *OscDispatcher) Dispatch(packet Packet, addr net.Addr) {
 						handler.HandleMessage(message)
 					}
 				}
+				if s.defaultHandler != nil {
+					s.defaultHandler.HandleMessage(message)
+				}
 			}
 
 			// Process all bundles
 			for _, b := range bundle.Bundles {
-				s.Dispatch(b, addr)
+				s.Dispatch(b)
 			}
 		}()
 	}
@@ -172,7 +179,7 @@ func NewMessage(address string, arguments ...interface{}) (msg *Message) {
 	return &Message{Address: address, Arguments: arguments}
 }
 
-// Append appends the given arguments to the arguments list.
+// Append appends the given argument to the arguments list.
 func (msg *Message) Append(arguments ...interface{}) {
 	msg.Arguments = append(msg.Arguments, arguments...)
 }
@@ -257,7 +264,6 @@ func (msg *Message) TypeTags() (string, error) {
 	return tags, nil
 }
 
-// String implements the fmt.Stringer interface.
 func (msg *Message) String() string {
 	if msg == nil {
 		return ""
@@ -294,7 +300,6 @@ func (msg *Message) String() string {
 			arguments = append(arguments, timeTag.TimeTag())
 		}
 	}
-
 	return fmt.Sprintf(formatString, arguments...)
 }
 
@@ -308,10 +313,12 @@ func (msg *Message) CountArguments() int {
 // 1. OSC Address Pattern
 // 2. OSC Type Tag String
 // 3. OSC Arguments
-func (msg *Message) MarshalBinary() ([]byte, error) {
+func (msg *Message) MarshalBinary() (buffer []byte, err error) {
+	// The byte buffer for the message
+	var data = new(bytes.Buffer)
+
 	// We can start with the OSC address and add it to the buffer
-	data := new(bytes.Buffer)
-	_, err := writePaddedString(msg.Address, data)
+	_, err = writePaddedString(msg.Address, data)
 	if err != nil {
 		return nil, err
 	}
@@ -320,7 +327,7 @@ func (msg *Message) MarshalBinary() ([]byte, error) {
 	typetags := []byte{','}
 
 	// Process the type tags and collect all arguments
-	payload := new(bytes.Buffer)
+	var payload = new(bytes.Buffer)
 	for _, arg := range msg.Arguments {
 		// FIXME: Use t instead of arg
 		switch t := arg.(type) {
@@ -383,7 +390,8 @@ func (msg *Message) MarshalBinary() ([]byte, error) {
 			typetags = append(typetags, 't')
 
 			timeTag := arg.(Timetag)
-			_, err = payload.Write(timeTag.ToByteArray())
+			b, _ := timeTag.MarshalBinary()
+			_, err = payload.Write(b)
 			if err != nil {
 				return nil, err
 			}
@@ -431,25 +439,25 @@ func (b *Bundle) Append(pck Packet) (err error) {
 	return nil
 }
 
-// MarshalBinary serializes the OSC bundle to a byte array with the following
-// format:
+// MarshalBinary serializes the OSC bundle to a byte array with the following format:
 // 1. Bundle string: '#bundle'
 // 2. OSC timetag
 // 3. Length of first OSC bundle element
 // 4. First bundle element
 // 5. Length of n OSC bundle element
 // 6. n bundle element
-func (b *Bundle) MarshalBinary() ([]byte, error) {
-	data := new(bytes.Buffer)
+func (b *Bundle) MarshalBinary() (buffer []byte, err error) {
+	var data = new(bytes.Buffer)
 
 	// Add the '#bundle' string
-	_, err := writePaddedString("#bundle", data)
+	_, err = writePaddedString("#bundle", data)
 	if err != nil {
 		return nil, err
 	}
 
 	// Add the timetag
-	if _, err = data.Write(b.Timetag.ToByteArray()); err != nil {
+	bd, _ := b.Timetag.MarshalBinary()
+	if _, err = data.Write(bd); err != nil {
 		return nil, err
 	}
 
@@ -590,22 +598,16 @@ func (s *Server) ListenAndServe() error {
 	if err != nil {
 		return err
 	}
-	return s.Serve(context.Background(), ln)
+	return s.Serve(ln)
 }
 
 // Serve retrieves incoming OSC packets from the given connection and dispatches
-// retrieved OSC packets. If something goes wrong an error is returned.
-func (s *Server) Serve(ctx context.Context, c net.PacketConn) error {
+// retreived OSC packets. If something goes wrong an error is returned.
+func (s *Server) Serve(c net.PacketConn) error {
 	var tempDelay time.Duration
-
-	if s.Dispatcher == nil {
-		s.Dispatcher = NewOscDispatcher()
-	}
-
 	for {
-		msg, addr, err := s.ReceivePacket(ctx, c)
+		msg, err := s.readFromConnection(c)
 		if err != nil {
-			// Attempt exponential back-off during temporary network problems.
 			if ne, ok := err.(net.Error); ok && ne.Temporary() {
 				if tempDelay == 0 {
 					tempDelay = 5 * time.Millisecond
@@ -616,49 +618,42 @@ func (s *Server) Serve(ctx context.Context, c net.PacketConn) error {
 					tempDelay = max
 				}
 				time.Sleep(tempDelay)
-				continue // Try again.
+				continue
 			}
-			return err // Error is not temporary.
+			return err
 		}
 		tempDelay = 0
-		go s.Dispatcher.Dispatch(msg, addr)
+		go s.Dispatcher.Dispatch(msg)
 	}
 
 	return nil
 }
 
-// ReceivePacket listens for incoming OSC packets and returns the packet and
-// client address if one is received.
-func (s *Server) ReceivePacket(ctx context.Context, c net.PacketConn) (Packet, net.Addr, error) {
-	if deadline, ok := ctx.Deadline(); ok {
-		if err := c.SetReadDeadline(deadline); err != nil {
-			return nil, nil, err
-		}
-	}
-
-	go func() {
-		select {
-		// case <-time.After(200 * time.Millisecond):
-		// 	log.Println("Overslept.")
-		case <-ctx.Done():
-			log.Println(ctx.Err())
-		}
-	}()
-
-	data := make([]byte, 65535)
-	var n, start int
-	n, addr, err := c.ReadFrom(data)
-	if err != nil {
-		return nil, nil, err
-	}
-	pkt, err := readPacket(bufio.NewReader(bytes.NewBuffer(data)), &start, n)
-	return pkt, addr, err
+// ReceivePacket listens for incoming OSC packets and returns the packet if one is received.
+func (s *Server) ReceivePacket(c net.PacketConn) (packet Packet, err error) {
+	return s.readFromConnection(c)
 }
 
-// ParsePacket reads the packet from a message.
-func ParsePacket(msg string) (Packet, error) {
+// readFromConnection retrieves OSC packets.
+func (s *Server) readFromConnection(c net.PacketConn) (packet Packet, err error) {
+	if s.ReadTimeout != 0 {
+		err = c.SetReadDeadline(time.Now().Add(s.ReadTimeout))
+		if err != nil {
+			return nil, err
+		}
+	}
+	data := make([]byte, 65535)
+	var n, start int
+	n, _, err = c.ReadFrom(data)
+	if err != nil {
+		return nil, err
+	}
+	return readPacket(bufio.NewReader(bytes.NewBuffer(data)), &start, n)
+}
+
+func ParsePacket(msgString string) (packet Packet, err error) {
 	var start int
-	return readPacket(bufio.NewReader(bytes.NewBufferString(msg)), &start, len(msg))
+	return readPacket(bufio.NewReader(bytes.NewBufferString(msgString)), &start, len(msgString))
 }
 
 // receivePacket receives an OSC packet from the given reader.
@@ -735,16 +730,19 @@ func readBundle(reader *bufio.Reader, start *int, end int) (bundle *Bundle, err 
 }
 
 // readMessage reads one OSC Message from reader.
-func readMessage(reader *bufio.Reader, start *int) (*Message, error) {
+func readMessage(reader *bufio.Reader, start *int) (msg *Message, err error) {
 	// First, read the OSC address
+	var n int
 	address, n, err := readPaddedString(reader)
 	if err != nil {
 		return nil, err
 	}
 	*start += n
 
+	// Create a new message
+	msg = NewMessage(address)
+
 	// Read all arguments
-	msg := NewMessage(address)
 	if err = readArguments(msg, reader, start); err != nil {
 		return nil, err
 	}
@@ -893,11 +891,11 @@ func (t *Timetag) TimeTag() uint64 {
 	return t.timeTag
 }
 
-// ToByteArray converts the OSC Time Tag to a byte array.
-func (t *Timetag) ToByteArray() []byte {
+// MarshalBinary converts the OSC Time Tag to a byte array.
+func (t *Timetag) MarshalBinary() ([]byte, error) {
 	var data = new(bytes.Buffer)
 	binary.Write(data, binary.BigEndian, t.timeTag)
-	return data.Bytes()
+	return data.Bytes(), nil
 }
 
 // SetTime sets the value of the OSC Time Tag.
@@ -1069,7 +1067,7 @@ func timetagToTime(timetag uint64) (t time.Time) {
 
 // PrintMessage pretty prints an OSC message to the standard output.
 func PrintMessage(msg *Message) {
-	fmt.Println(msg)
+	fmt.Println(msg.String())
 }
 
 // existsAddress returns true if the OSC address s is found in handlers. Otherwise, false.

@@ -1,9 +1,9 @@
 package main
 
-import osc "github.com/kward/go-osc"
+import "github.com/hypebeast/go-osc/osc"
 
 func main() {
-	addr := "0.0.0.0:8000"
+	addr := "127.0.0.1:8765"
 	server := &osc.Server{Addr: addr}
 
 	server.Handle("/message/address", func(msg *osc.Message) {

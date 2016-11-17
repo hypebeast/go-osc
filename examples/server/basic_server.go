@@ -6,12 +6,11 @@ import (
 	"net"
 	"os"
 
-	osc "github.com/kward/go-osc"
-	"golang.org/x/net/context"
+	"github.com/hypebeast/go-osc/osc"
 )
 
 func main() {
-	addr := "0.0.0.0:8000"
+	addr := "127.0.0.1:8765"
 	server := &osc.Server{}
 	conn, err := net.ListenPacket("udp", addr)
 	if err != nil {
@@ -26,7 +25,7 @@ func main() {
 		fmt.Println("Start listening on", addr)
 
 		for {
-			packet, remote, err := server.ReceivePacket(context.Background(), conn)
+			packet, err := server.ReceivePacket(conn)
 			if err != nil {
 				fmt.Println("Server error: " + err.Error())
 				os.Exit(1)
@@ -35,14 +34,14 @@ func main() {
 			if packet != nil {
 				switch packet.(type) {
 				default:
-					fmt.Println("Unknown packet type!")
+					fmt.Println("Unknow packet type!")
 
 				case *osc.Message:
-					fmt.Printf("-- OSC Message from %v: ", remote)
+					fmt.Printf("-- OSC Message: ")
 					osc.PrintMessage(packet.(*osc.Message))
 
 				case *osc.Bundle:
-					fmt.Println("-- OSC Bundle from %v:", remote)
+					fmt.Println("-- OSC Bundle:")
 					bundle := packet.(*osc.Bundle)
 					for i, message := range bundle.Messages {
 						fmt.Printf("  -- OSC Message #%d: ", i+1)
