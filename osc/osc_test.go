@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func TestAppendArguments(t *testing.T) {
+func TestMessage_Append(t *testing.T) {
 	oscAddress := "/address"
 	message := NewMessage(oscAddress)
 	if message.Address != oscAddress {
