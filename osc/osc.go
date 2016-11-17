@@ -247,12 +247,12 @@ func (msg *Message) Match(address string) bool {
 }
 
 // TypeTags returns the type tag string.
-func (msg *Message) TypeTags() (tags string, err error) {
+func (msg *Message) TypeTags() (string, error) {
 	if msg == nil {
 		return "", fmt.Errorf("message is nil")
 	}
 
-	tags = ","
+	tags := ","
 	for _, m := range msg.Arguments {
 		s, err := getTypeTag(m)
 		if err != nil {
@@ -264,6 +264,7 @@ func (msg *Message) TypeTags() (tags string, err error) {
 	return tags, nil
 }
 
+// String implements the fmt.Stringer interface.
 func (msg *Message) String() string {
 	if msg == nil {
 		return ""
