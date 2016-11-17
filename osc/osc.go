@@ -247,12 +247,8 @@ func (msg *Message) Match(address string) bool {
 }
 
 // TypeTags returns the type tag string.
-func (msg *Message) TypeTags() (string, error) {
-	if msg == nil {
-		return "", fmt.Errorf("message is nil")
-	}
-
-	tags := ","
+func (msg *Message) TypeTags() (tags string, err error) {
+	tags = ","
 	for _, m := range msg.Arguments {
 		s, err := getTypeTag(m)
 		if err != nil {
@@ -265,10 +261,6 @@ func (msg *Message) TypeTags() (string, error) {
 }
 
 func (msg *Message) String() string {
-	if msg == nil {
-		return ""
-	}
-
 	tags, err := msg.TypeTags()
 	if err != nil {
 		return ""
@@ -655,6 +647,7 @@ func ParsePacket(msgString string) (packet Packet, err error) {
 	var start int
 	return readPacket(bufio.NewReader(bytes.NewBufferString(msgString)), &start, len(msgString))
 }
+
 
 // receivePacket receives an OSC packet from the given reader.
 func readPacket(reader *bufio.Reader, start *int, end int) (packet Packet, err error) {
