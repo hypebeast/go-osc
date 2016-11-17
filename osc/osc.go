@@ -253,6 +253,43 @@ func (msg *Message) TypeTags() (tags string, err error) {
 	return tags, nil
 }
 
+// String implements the fmt.Stringer interface.
+func (msg *Message) String() string {
+	tags, err := msg.TypeTags()
+	if err != nil {
+		return ""
+	}
+
+	var formatString string
+	var arguments []interface{}
+	formatString += "%s %s"
+	arguments = append(arguments, msg.Address)
+	arguments = append(arguments, tags)
+
+	for _, arg := range msg.Arguments {
+		switch arg.(type) {
+		case bool, int32, int64, float32, float64, string:
+			formatString += " %v"
+			arguments = append(arguments, arg)
+
+		case nil:
+			formatString += " %s"
+			arguments = append(arguments, "Nil")
+
+		case []byte:
+			formatString += " %s"
+			arguments = append(arguments, "blob")
+
+		case Timetag:
+			formatString += " %d"
+			timeTag := arg.(Timetag)
+			arguments = append(arguments, timeTag.TimeTag())
+		}
+	}
+
+	return fmt.Sprintf(formatString, arguments...)
+}
+
 // CountArguments returns the number of arguments.
 func (msg *Message) CountArguments() int {
 	return len(msg.Arguments)
@@ -1021,42 +1058,6 @@ func timetagToTime(timetag uint64) (t time.Time) {
 ////
 // Utility and helper functions
 ////
-
-// PrintMessage pretty prints an OSC message to the standard output.
-func PrintMessage(msg *Message) {
-	tags, err := msg.TypeTags()
-	if err != nil {
-		return
-	}
-
-	var formatString string
-	var arguments []interface{}
-	formatString += "%s %s"
-	arguments = append(arguments, msg.Address)
-	arguments = append(arguments, tags)
-
-	for _, arg := range msg.Arguments {
-		switch arg.(type) {
-		case bool, int32, int64, float32, float64, string:
-			formatString += " %v"
-			arguments = append(arguments, arg)
-
-		case nil:
-			formatString += " %s"
-			arguments = append(arguments, "Nil")
-
-		case []byte:
-			formatString += " %s"
-			arguments = append(arguments, "blob")
-
-		case Timetag:
-			formatString += " %d"
-			timeTag := arg.(Timetag)
-			arguments = append(arguments, timeTag.TimeTag())
-		}
-	}
-	fmt.Println(fmt.Sprintf(formatString, arguments...))
-}
 
 // existsAddress returns true if the OSC address s is found in handlers. Otherwise, false.
 func existsAddress(s string, handlers map[string]Handler) bool {
