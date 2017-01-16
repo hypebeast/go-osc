@@ -109,28 +109,27 @@ type OscDispatcher struct {
 }
 
 // NewOscDispatcher returns an OscDispatcher.
-func NewOscDispatcher() (dispatcher *OscDispatcher) {
+func NewOscDispatcher() *OscDispatcher {
 	return &OscDispatcher{handlers: make(map[string]Handler)}
 }
 
 // AddMsgHandler adds a new message handler for the given OSC address.
-func (s *OscDispatcher) AddMsgHandler(address string, handler HandlerFunc) error {
-	if address == "*" {
+func (s *OscDispatcher) AddMsgHandler(addr string, handler HandlerFunc) error {
+	if addr == "*" {
 		s.defaultHandler = handler
 		return nil
 	}
 	for _, chr := range "*?,[]{}# " {
-		if strings.Contains(address, fmt.Sprintf("%c", chr)) {
+		if strings.Contains(addr, fmt.Sprintf("%c", chr)) {
 			return errors.New("OSC Address string may not contain any characters in \"*?,[]{}# \n")
 		}
 	}
 
-	if existsAddress(address, s.handlers) {
+	if existsAddress(addr, s.handlers) {
 		return errors.New("OSC address exists already")
 	}
 
-	s.handlers[address] = handler
-
+	s.handlers[addr] = handler
 	return nil
 }
 
@@ -142,8 +141,8 @@ func (s *OscDispatcher) Dispatch(packet Packet) {
 
 	case *Message:
 		msg, _ := packet.(*Message)
-		for address, handler := range s.handlers {
-			if msg.Match(address) {
+		for addr, handler := range s.handlers {
+			if msg.Match(addr) {
 				handler.HandleMessage(msg)
 			}
 		}
@@ -423,12 +422,12 @@ func (msg *Message) MarshalBinary() ([]byte, error) {
 
 // NewBundle returns an OSC Bundle. Use this function to create a new OSC
 // Bundle.
-func NewBundle(time time.Time) (bundle *Bundle) {
+func NewBundle(time time.Time) *Bundle {
 	return &Bundle{Timetag: *NewTimetag(time)}
 }
 
 // Append appends an OSC bundle or OSC message to the bundle.
-func (b *Bundle) Append(pck Packet) (err error) {
+func (b *Bundle) Append(pck Packet) error {
 	switch t := pck.(type) {
 	default:
 		return fmt.Errorf("Unsupported OSC packet type: only Bundle and Message are supported.")
@@ -1133,6 +1132,7 @@ func getTypeTag(arg interface{}) (string, error) {
 		return "d", nil
 	case Timetag:
 		return "t", nil
+	default:
+		return "", fmt.Errorf("Unsupported type: %T", t)
 	}
-	return "", fmt.Errorf("Unsupported type: %T", t)
 }
