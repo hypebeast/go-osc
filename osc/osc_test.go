@@ -3,9 +3,7 @@ package osc
 import (
 	"bufio"
 	"bytes"
-	"log"
 	"net"
-	"os"
 	"reflect"
 	"sync"
 	"testing"
@@ -478,9 +476,4 @@ func makePacket(addr string, args []string) Packet {
 		msg.Append(arg)
 	}
 	return msg
-}
-
-func TestMain(m *testing.M) {
-	log.SetFlags(log.Flags() | log.Lshortfile)
-	os.Exit(m.Run())
 }
