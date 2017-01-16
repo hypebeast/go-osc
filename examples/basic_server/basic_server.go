@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	addr := "127.0.0.1:8765"
+	addr := "127.0.0.1:8000"
 	server := &osc.Server{}
 	conn, err := net.ListenPacket("udp", addr)
 	if err != nil {
