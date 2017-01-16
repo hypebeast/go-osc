@@ -32,6 +32,9 @@ type Message struct {
 	Arguments []interface{}
 }
 
+// Verify that Messages implements the Packet interface.
+var _ Packet = (*Message)(nil)
+
 // Bundle represents an OSC bundle. It consists of the OSC-string "#bundle" followed
 // by an OSC Time Tag, followed by zero or more OSC bundle/message elements. The
 // OSC-timetag is a 64-bit fixed point time tag. See
@@ -41,6 +44,9 @@ type Bundle struct {
 	Messages []*Message
 	Bundles  []*Bundle
 }
+
+// Verify that Bundle implements the Packet interface.
+var _ Packet = (*Bundle)(nil)
 
 // Client enables you to send OSC packets. It sends OSC messages and bundles to the
 // given IP address and port.
