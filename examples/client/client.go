@@ -14,7 +14,7 @@ import (
 // TODO: Revise the client!
 func main() {
 	ip := "localhost"
-	port := 9000
+	port := 8765
 	client := osc.NewClient(ip, port)
 
 	fmt.Println("### Welcome to go-osc transmitter demo")
