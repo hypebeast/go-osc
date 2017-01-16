@@ -1088,14 +1088,14 @@ func getRegEx(pattern string) *regexp.Regexp {
 	for _, trs := range []struct {
 		old, new string // old, new
 	}{
-		{".", "\\."}, // Escape all '.' in the pattern
-		{"(", "\\("}, // Escape all '(' in the pattern
-		{")", "\\)"}, // Escape all ')' in the pattern
-		{"*", ".*"},  // Replace a '*' with '.*' that matches zero or more chars
-		{"{", "("},   // Change a '{' to '('
-		{",", "|"},   // Change a ',' to '|'
-		{"}", ")"},   // Change a '}' to ')'
-		{"?", "."},   // Change a '?' to '.'
+		{".", `\.`}, // Escape all '.' in the pattern
+		{"(", `\(`}, // Escape all '(' in the pattern
+		{")", `\)`}, // Escape all ')' in the pattern
+		{"*", ".*"}, // Replace a '*' with '.*' that matches zero or more chars
+		{"{", "("},  // Change a '{' to '('
+		{",", "|"},  // Change a ',' to '|'
+		{"}", ")"},  // Change a '}' to ')'
+		{"?", "."},  // Change a '?' to '.'
 	} {
 		pattern = strings.Replace(pattern, trs.old, trs.new, -1)
 	}
