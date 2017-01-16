@@ -1111,43 +1111,28 @@ func getRegEx(pattern string) *regexp.Regexp {
 
 // getTypeTag returns the OSC type tag for the given argument.
 func getTypeTag(arg interface{}) (string, error) {
-	s := ""
-
 	switch t := arg.(type) {
-	default:
-		return "", fmt.Errorf("Unsupported type: %T", t)
-
 	case bool:
 		if arg.(bool) {
-			s = "T"
-		} else {
-			s = "F"
+			return "T", nil
 		}
-
+		return "F", nil
 	case nil:
-		s = "N"
-
+		return "N", nil
 	case int32:
-		s = "i"
-
+		return "i", nil
 	case float32:
-		s = "f"
-
+		return "f", nil
 	case string:
-		s = "s"
-
+		return "s", nil
 	case []byte:
-		s = "b"
-
+		return "b", nil
 	case int64:
-		s = "h"
-
+		return "h", nil
 	case float64:
-		s = "d"
-
+		return "d", nil
 	case Timetag:
-		s = "t"
+		return "t", nil
 	}
-
-	return s, nil
+	return "", fmt.Errorf("Unsupported type: %T", t)
 }
