@@ -45,9 +45,9 @@ type Bundle struct {
 // Client enables you to send OSC packets. It sends OSC messages and bundles to the
 // given IP address and port.
 type Client struct {
-	ipaddress string
-	port      int
-	laddr     *net.UDPAddr
+	ip    string
+	port  int
+	laddr *net.UDPAddr
 }
 
 // Server represents an OSC server. The server listens on Address and Port for
@@ -175,13 +175,13 @@ func (s *OscDispatcher) Dispatch(packet Packet) {
 ////
 
 // NewMessage returns a new Message. The address parameter is the OSC address.
-func NewMessage(address string, arguments ...interface{}) *Message {
-	return &Message{Address: address, Arguments: arguments}
+func NewMessage(addr string, args ...interface{}) *Message {
+	return &Message{Address: addr, Arguments: args}
 }
 
 // Append appends the given arguments to the arguments list.
-func (msg *Message) Append(arguments ...interface{}) {
-	msg.Arguments = append(msg.Arguments, arguments...)
+func (msg *Message) Append(args ...interface{}) {
+	msg.Arguments = append(msg.Arguments, args...)
 }
 
 // Equals determines if the given OSC Message b is equal to the current OSC Message.
@@ -236,10 +236,10 @@ func (msg *Message) ClearData() {
 
 // Match returns true, if the address of the OSC Message matches the given address.
 // The match is case sensitive!
-func (msg *Message) Match(address string) bool {
+func (msg *Message) Match(addr string) bool {
 	exp := getRegEx(msg.Address)
 
-	if exp.MatchString(address) {
+	if exp.MatchString(addr) {
 		return true
 	}
 
@@ -276,32 +276,32 @@ func (msg *Message) String() string {
 	}
 
 	formatString := "%s %s"
-	var arguments []interface{}
-	arguments = append(arguments, msg.Address)
-	arguments = append(arguments, tags)
+	var args []interface{}
+	args = append(args, msg.Address)
+	args = append(args, tags)
 
 	for _, arg := range msg.Arguments {
 		switch arg.(type) {
 		case bool, int32, int64, float32, float64, string:
 			formatString += " %v"
-			arguments = append(arguments, arg)
+			args = append(args, arg)
 
 		case nil:
 			formatString += " %s"
-			arguments = append(arguments, "Nil")
+			args = append(args, "Nil")
 
 		case []byte:
 			formatString += " %s"
-			arguments = append(arguments, "blob")
+			args = append(args, "blob")
 
 		case Timetag:
 			formatString += " %d"
 			timeTag := arg.(Timetag)
-			arguments = append(arguments, timeTag.TimeTag())
+			args = append(args, timeTag.TimeTag())
 		}
 	}
 
-	return fmt.Sprintf(formatString, arguments...)
+	return fmt.Sprintf(formatString, args...)
 }
 
 // CountArguments returns the number of arguments.
@@ -510,17 +510,17 @@ func (b *Bundle) MarshalBinary() ([]byte, error) {
 // specifies the IP address and port defines the target port where the messages
 // and bundles will be send to.
 func NewClient(ip string, port int) *Client {
-	return &Client{ipaddress: ip, port: port, laddr: nil}
+	return &Client{ip: ip, port: port, laddr: nil}
 }
 
 // Ip returns the IP address.
 func (c *Client) IP() string {
-	return c.ipaddress
+	return c.ip
 }
 
 // SetIp sets a new IP address.
 func (c *Client) SetIP(ip string) {
-	c.ipaddress = ip
+	c.ip = ip
 }
 
 // Port returns the port.
@@ -545,7 +545,7 @@ func (c *Client) SetLocalAddr(ip string, port int) error {
 
 // Send sends an OSC Bundle or an OSC Message.
 func (c *Client) Send(packet Packet) error {
-	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", c.ipaddress, c.port))
+	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", c.ip, c.port))
 	if err != nil {
 		return err
 	}
