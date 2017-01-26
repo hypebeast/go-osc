@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"net"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -25,10 +26,9 @@ func TestMessage_Append(t *testing.T) {
 	}
 }
 
-func TestMessage_Equal(t *testing.T) {
+func TestMessage_Equals(t *testing.T) {
 	msg1 := NewMessage("/address")
 	msg2 := NewMessage("/address")
-
 	msg1.Append(1234)
 	msg2.Append(1234)
 	msg1.Append("test string")
@@ -114,7 +114,7 @@ func TestHandleWithInvalidAddress(t *testing.T) {
 func TestServerMessageDispatching(t *testing.T) {
 	finish := make(chan bool)
 	start := make(chan bool)
-	var done sync.WaitGroup
+	done := sync.WaitGroup{}
 	done.Add(2)
 
 	// Start the OSC server in a new go-routine
@@ -174,7 +174,7 @@ func TestServerMessageDispatching(t *testing.T) {
 func TestServerMessageReceiving(t *testing.T) {
 	finish := make(chan bool)
 	start := make(chan bool)
-	var done sync.WaitGroup
+	done := sync.WaitGroup{}
 	done.Add(2)
 
 	// Start the server in a go-routine
@@ -192,27 +192,26 @@ func TestServerMessageReceiving(t *testing.T) {
 		packet, err := server.ReceivePacket(c)
 		if err != nil {
 			t.Error("Server error")
+			return
 		}
 		if packet == nil {
 			t.Error("nil packet")
+			return
 		}
-		if packet != nil {
-			msg := packet.(*Message)
-			if msg.CountArguments() != 2 {
-				t.Errorf("Argument length should be 2 and is: %d\n", msg.CountArguments())
-			}
 
-			if msg.Arguments[0].(int32) != 1122 {
-				t.Error("Argument should be 1122 and is: " + string(msg.Arguments[0].(int32)))
-			}
-
-			if msg.Arguments[1].(int32) != 3344 {
-				t.Error("Argument should be 3344 and is: " + string(msg.Arguments[1].(int32)))
-			}
-
-			c.Close()
-			finish <- true
+		msg := packet.(*Message)
+		if msg.CountArguments() != 2 {
+			t.Errorf("Argument length should be 2 and is: %d\n", msg.CountArguments())
 		}
+		if msg.Arguments[0].(int32) != 1122 {
+			t.Error("Argument should be 1122 and is: " + string(msg.Arguments[0].(int32)))
+		}
+		if msg.Arguments[1].(int32) != 3344 {
+			t.Error("Argument should be 3344 and is: " + string(msg.Arguments[1].(int32)))
+		}
+
+		c.Close()
+		finish <- true
 	}()
 
 	go func() {
@@ -242,7 +241,7 @@ func TestServerMessageReceiving(t *testing.T) {
 
 func TestReadTimeout(t *testing.T) {
 	start := make(chan bool)
-	var wg sync.WaitGroup
+	wg := sync.WaitGroup{}
 	wg.Add(2)
 
 	go func() {
@@ -280,27 +279,29 @@ func TestReadTimeout(t *testing.T) {
 		start <- true
 		p, err := server.ReceivePacket(c)
 		if err != nil {
-			t.Fatal("server error:", err)
+			t.Errorf("server error: %v", err)
 			return
 		}
-		if a := p.(*Message).Address; a != "/address/test1" {
-			t.Fatalf("wrong address, got %s want %s", a, "/address/test1")
+		if got, want := p.(*Message).Address, "/address/test1"; got != want {
+			t.Errorf("wrong address; got = %s, want = %s", got, want)
+			return
 		}
 
 		// Second receive should time out since client is delayed 150 milliseconds
-		_, err = server.ReceivePacket(c)
-		if err == nil {
-			t.Fatal("expected error")
+		if _, err = server.ReceivePacket(c); err == nil {
+			t.Errorf("expected error")
 			return
 		}
 
 		// Next receive should get it
 		p, err = server.ReceivePacket(c)
 		if err != nil {
-			t.Fatalf("server error:", err)
+			t.Errorf("server error: %v", err)
+			return
 		}
-		if a := p.(*Message).Address; a != "/address/test2" {
-			t.Fatalf("wrong address, got %s want %s", a, "/address/test2")
+		if got, want := p.(*Message).Address, "/address/test2"; got != want {
+			t.Errorf("wrong address; got = %s, want = %s", got, want)
+			return
 		}
 	}()
 
@@ -308,35 +309,25 @@ func TestReadTimeout(t *testing.T) {
 }
 
 func TestReadPaddedString(t *testing.T) {
-	buf1 := []byte{'t', 'e', 's', 't', 's', 't', 'r', 'i', 'n', 'g', 0, 0}
-	buf2 := []byte{'t', 'e', 's', 't', 0, 0, 0, 0}
-
-	bytesBuffer := bytes.NewBuffer(buf1)
-	st, n, err := readPaddedString(bufio.NewReader(bytesBuffer))
-	if err != nil {
-		t.Error("Error reading padded string: " + err.Error())
-	}
-
-	if n != 12 {
-		t.Errorf("Number of bytes needs to be 12 and is: %d\n", n)
-	}
-
-	if st != "teststring" {
-		t.Errorf("String should be \"teststring\" and is \"%s\"", st)
-	}
-
-	bytesBuffer = bytes.NewBuffer(buf2)
-	st, n, err = readPaddedString(bufio.NewReader(bytesBuffer))
-	if err != nil {
-		t.Error("Error reading padded string: " + err.Error())
-	}
-
-	if n != 8 {
-		t.Errorf("Number of bytes needs to be 8 and is: %d\n", n)
-	}
-
-	if st != "test" {
-		t.Errorf("String should be \"test\" and is \"%s\"", st)
+	for _, tt := range []struct {
+		buf []byte // buffer
+		n   int    // bytes needed
+		s   string // resulting string
+	}{
+		{[]byte{'t', 'e', 's', 't', 's', 't', 'r', 'i', 'n', 'g', 0, 0}, 12, "teststring"},
+		{[]byte{'t', 'e', 's', 't', 0, 0, 0, 0}, 8, "test"},
+	} {
+		buf := bytes.NewBuffer(tt.buf)
+		s, n, err := readPaddedString(bufio.NewReader(buf))
+		if err != nil {
+			t.Errorf("%s: Error reading padded string: %s", s, err)
+		}
+		if got, want := n, tt.n; got != want {
+			t.Errorf("%s: Bytes needed don't match; got = %d, want = %d", tt.s, got, want)
+		}
+		if got, want := s, tt.s; got != want {
+			t.Errorf("%s: Strings don't match; got = %d, want = %d", tt.s, got, want)
+		}
 	}
 }
 
@@ -420,4 +411,69 @@ func TestClientSetLocalAddr(t *testing.T) {
 	if client.laddr.String() != expectedAddr {
 		t.Errorf("Expected laddr to be %s but was %s", expectedAddr, client.laddr.String())
 	}
+}
+
+func TestParsePacket(t *testing.T) {
+	for _, tt := range []struct {
+		desc string
+		msg  string
+		pkt  Packet
+		ok   bool
+	}{
+		{"no_args",
+			"/a/b/c" + nulls(2) + "," + nulls(3),
+			makePacket("/a/b/c", nil),
+			true},
+		{"string_arg",
+			"/d/e/f" + nulls(2) + ",s" + nulls(2) + "foo" + nulls(1),
+			makePacket("/d/e/f", []string{"foo"}),
+			true},
+		{"empty", "", nil, false},
+	} {
+		pkt, err := ParsePacket(tt.msg)
+		if err != nil && tt.ok {
+			t.Errorf("%s: ParsePacket() returned unexpected error; %s", tt.desc, err)
+		}
+		if err == nil && !tt.ok {
+			t.Errorf("%s: ParsePacket() expected error", tt.desc)
+		}
+		if !tt.ok {
+			continue
+		}
+
+		pktBytes, err := pkt.MarshalBinary()
+		if err != nil {
+			t.Errorf("%s: failure converting pkt to byte array; %s", tt.desc, err)
+			continue
+		}
+		ttpktBytes, err := tt.pkt.MarshalBinary()
+		if err != nil {
+			t.Errorf("%s: failure converting tt.pkt to byte array; %s", tt.desc, err)
+			continue
+		}
+		if got, want := pktBytes, ttpktBytes; !reflect.DeepEqual(got, want) {
+			t.Errorf("%s: ParsePacket() as bytes = '%s', want = '%s'", tt.desc, got, want)
+			continue
+		}
+	}
+}
+
+const zero = string(byte(0))
+
+// nulls returns a string of `i` nulls.
+func nulls(i int) string {
+	s := ""
+	for j := 0; j < i; j++ {
+		s += zero
+	}
+	return s
+}
+
+// makePacket creates a fake Message Packet.
+func makePacket(addr string, args []string) Packet {
+	msg := NewMessage(addr)
+	for _, arg := range args {
+		msg.Append(arg)
+	}
+	return msg
 }
