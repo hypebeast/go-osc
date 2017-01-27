@@ -1031,7 +1031,7 @@ func addressExists(addr string, handlers map[string]Handler) bool {
 // address `pattern`.
 func getRegEx(pattern string) *regexp.Regexp {
 	for _, trs := range []struct {
-		old, new string // old, new
+		old, new string
 	}{
 		{".", `\.`}, // Escape all '.' in the pattern
 		{"(", `\(`}, // Escape all '(' in the pattern
