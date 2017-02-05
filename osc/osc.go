@@ -1,5 +1,5 @@
-// go-osc provides a package for sending and receiving OpenSoundControl messages.
-// The package is implemented in pure Go.
+// go-osc provides a package for sending and receiving OpenSoundControl
+// messages. The package is implemented in pure Go.
 package osc
 
 import (
@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"reflect"
 	"regexp"
 	"strings"
 	"time"
@@ -25,8 +26,8 @@ type Packet interface {
 	encoding.BinaryMarshaler
 }
 
-// Message represents a single OSC message. An OSC message consists of an OSC address
-// pattern and zero or more arguments.
+// Message represents a single OSC message. An OSC message consists of an OSC
+// address pattern and zero or more arguments.
 type Message struct {
 	Address   string
 	Arguments []interface{}
@@ -35,9 +36,9 @@ type Message struct {
 // Verify that Messages implements the Packet interface.
 var _ Packet = (*Message)(nil)
 
-// Bundle represents an OSC bundle. It consists of the OSC-string "#bundle" followed
-// by an OSC Time Tag, followed by zero or more OSC bundle/message elements. The
-// OSC-timetag is a 64-bit fixed point time tag. See
+// Bundle represents an OSC bundle. It consists of the OSC-string "#bundle"
+// followed by an OSC Time Tag, followed by zero or more OSC bundle/message
+// elements. The OSC-timetag is a 64-bit fixed point time tag. See
 // http://opensoundcontrol.org/spec-1_0 for more information.
 type Bundle struct {
 	Timetag  Timetag
@@ -48,8 +49,8 @@ type Bundle struct {
 // Verify that Bundle implements the Packet interface.
 var _ Packet = (*Bundle)(nil)
 
-// Client enables you to send OSC packets. It sends OSC messages and bundles to the
-// given IP address and port.
+// Client enables you to send OSC packets. It sends OSC messages and bundles to
+// the given IP address and port.
 type Client struct {
 	ip    string
 	port  int
@@ -82,16 +83,17 @@ type Dispatcher interface {
 	Dispatch(packet Packet)
 }
 
-// Handler is an interface for message handlers. Every handler implementation for
-// an OSC message must implement this interface.
+// Handler is an interface for message handlers. Every handler implementation
+// for an OSC message must implement this interface.
 type Handler interface {
 	HandleMessage(msg *Message)
 }
 
-// HandlerFunc implements the Handler interface. Type defintion for an OSC handler function
+// HandlerFunc implements the Handler interface. Type definition for an OSC
+// handler function.
 type HandlerFunc func(msg *Message)
 
-// HandleMessage calls themeself with the given OSC Message. Implements the
+// HandleMessage calls itself with the given OSC Message. Implements the
 // Handler interface.
 func (f HandlerFunc) HandleMessage(msg *Message) {
 	f(msg)
@@ -125,7 +127,7 @@ func (s *OscDispatcher) AddMsgHandler(addr string, handler HandlerFunc) error {
 		}
 	}
 
-	if existsAddress(addr, s.handlers) {
+	if addressExists(addr, s.handlers) {
 		return errors.New("OSC address exists already")
 	}
 
@@ -189,43 +191,11 @@ func (msg *Message) Append(args ...interface{}) {
 	msg.Arguments = append(msg.Arguments, args...)
 }
 
-// Equals determines if the given OSC Message b is equal to the current OSC Message.
-// It checks if the OSC address and the arguments are equal. Returns, true if the
-// current object and b are equal.
-func (msg *Message) Equals(b *Message) bool {
-	// Check OSC address
-	if msg.Address != b.Address {
-		return false
-	}
-
-	// Check if the number of arguments are equal
-	if msg.CountArguments() != b.CountArguments() {
-		return false
-	}
-
-	// Check arguments
-	for i, arg := range msg.Arguments {
-		switch arg.(type) {
-		case bool, int32, int64, float32, float64, string:
-			if arg != b.Arguments[i] {
-				return false
-			}
-
-		case []byte:
-			ba := arg.([]byte)
-			bb := b.Arguments[i].([]byte)
-			if !bytes.Equal(ba, bb) {
-				return false
-			}
-
-		case Timetag:
-			if arg.(*Timetag).TimeTag() != b.Arguments[i].(*Timetag).TimeTag() {
-				return false
-			}
-		}
-	}
-
-	return true
+// Equals returns true if the given OSC Message `m` is equal to the current OSC
+// Message. It checks if the OSC address and the arguments are equal. Returns
+// true if the current object and `m` are equal.
+func (msg *Message) Equals(m *Message) bool {
+	return reflect.DeepEqual(msg, m)
 }
 
 // Clear clears the OSC address and all arguments.
@@ -239,15 +209,13 @@ func (msg *Message) ClearData() {
 	msg.Arguments = msg.Arguments[len(msg.Arguments):]
 }
 
-// Match returns true, if the address of the OSC Message matches the given address.
-// The match is case sensitive!
+// Match returns true, if the address of the OSC Message matches the given
+// address. The match is case sensitive!
 func (msg *Message) Match(addr string) bool {
 	exp := getRegEx(msg.Address)
-
 	if exp.MatchString(addr) {
 		return true
 	}
-
 	return false
 }
 
@@ -349,49 +317,42 @@ func (msg *Message) MarshalBinary() ([]byte, error) {
 
 		case int32:
 			typetags = append(typetags, 'i')
-
 			if err := binary.Write(payload, binary.BigEndian, int32(t)); err != nil {
 				return nil, err
 			}
 
 		case float32:
 			typetags = append(typetags, 'f')
-
 			if err := binary.Write(payload, binary.BigEndian, float32(t)); err != nil {
 				return nil, err
 			}
 
 		case string:
 			typetags = append(typetags, 's')
-
 			if _, err := writePaddedString(t, payload); err != nil {
 				return nil, err
 			}
 
 		case []byte:
 			typetags = append(typetags, 'b')
-
 			if _, err := writeBlob(t, payload); err != nil {
 				return nil, err
 			}
 
 		case int64:
 			typetags = append(typetags, 'h')
-
 			if err := binary.Write(payload, binary.BigEndian, int64(t)); err != nil {
 				return nil, err
 			}
 
 		case float64:
 			typetags = append(typetags, 'd')
-
 			if err := binary.Write(payload, binary.BigEndian, float64(t)); err != nil {
 				return nil, err
 			}
 
 		case Timetag:
 			typetags = append(typetags, 't')
-
 			timeTag := arg.(Timetag)
 			b, err := timeTag.MarshalBinary()
 			if err != nil {
@@ -457,7 +418,7 @@ func (b *Bundle) MarshalBinary() ([]byte, error) {
 		return nil, err
 	}
 
-	// Add the timetag
+	// Add the time tag
 	bd, err := b.Timetag.MarshalBinary()
 	if err != nil {
 		return nil, err
@@ -511,32 +472,24 @@ func (b *Bundle) MarshalBinary() ([]byte, error) {
 ////
 
 // NewClient creates a new OSC client. The Client is used to send OSC
-// messages and OSC bundles over an UDP network connection. The argument ip
-// specifies the IP address and port defines the target port where the messages
-// and bundles will be send to.
+// messages and OSC bundles over an UDP network connection. The `ip` argument
+// specifies the IP address and `port` defines the target port where the
+// messages and bundles will be send to.
 func NewClient(ip string, port int) *Client {
 	return &Client{ip: ip, port: port, laddr: nil}
 }
 
-// Ip returns the IP address.
-func (c *Client) IP() string {
-	return c.ip
-}
+// IP returns the IP address.
+func (c *Client) IP() string { return c.ip }
 
 // SetIp sets a new IP address.
-func (c *Client) SetIP(ip string) {
-	c.ip = ip
-}
+func (c *Client) SetIP(ip string) { c.ip = ip }
 
 // Port returns the port.
-func (c *Client) Port() int {
-	return c.port
-}
+func (c *Client) Port() int { return c.port }
 
 // SetPort sets a new port.
-func (c *Client) SetPort(port int) {
-	c.port = port
-}
+func (c *Client) SetPort(port int) { c.port = port }
 
 // SetLocalAddr sets the local address.
 func (c *Client) SetLocalAddr(ip string, port int) error {
@@ -575,8 +528,8 @@ func (c *Client) Send(packet Packet) error {
 // Server
 ////
 
-// Handle registers a new message handler function for an OSC address. The handler
-// is the function called for incoming OscMessages that match 'address'.
+// Handle registers a new message handler function for an OSC address. The
+// handler is the function called for incoming OscMessages that match 'address'.
 func (s *Server) Handle(addr string, handler HandlerFunc) error {
 	if s.Dispatcher == nil {
 		s.Dispatcher = NewOscDispatcher()
@@ -734,7 +687,7 @@ func readBundle(reader *bufio.Reader, start *int, end int) (*Bundle, error) {
 	return bundle, nil
 }
 
-// readMessage reads one OSC Message from reader.
+// readMessage from `reader`.
 func readMessage(reader *bufio.Reader, start *int) (*Message, error) {
 	// First, read the OSC address
 	addr, n, err := readPaddedString(reader)
@@ -752,7 +705,7 @@ func readMessage(reader *bufio.Reader, start *int) (*Message, error) {
 	return msg, nil
 }
 
-// readArguments reads all arguments from the reader and adds it to the OSC message.
+// readArguments from `reader` and add them to the OSC message `msg`.
 func readArguments(msg *Message, reader *bufio.Reader, start *int) error {
 	// Read the type tag string
 	var n int
@@ -775,8 +728,7 @@ func readArguments(msg *Message, reader *bufio.Reader, start *int) error {
 		default:
 			return fmt.Errorf("unsupported type tag: %c", c)
 
-		// int32
-		case 'i':
+		case 'i': // int32
 			var i int32
 			if err = binary.Read(reader, binary.BigEndian, &i); err != nil {
 				return err
@@ -784,8 +736,7 @@ func readArguments(msg *Message, reader *bufio.Reader, start *int) error {
 			*start += 4
 			msg.Append(i)
 
-		// int64
-		case 'h':
+		case 'h': // int64
 			var i int64
 			if err = binary.Read(reader, binary.BigEndian, &i); err != nil {
 				return err
@@ -793,8 +744,7 @@ func readArguments(msg *Message, reader *bufio.Reader, start *int) error {
 			*start += 8
 			msg.Append(i)
 
-		// float32
-		case 'f':
+		case 'f': // float32
 			var f float32
 			if err = binary.Read(reader, binary.BigEndian, &f); err != nil {
 				return err
@@ -802,8 +752,7 @@ func readArguments(msg *Message, reader *bufio.Reader, start *int) error {
 			*start += 4
 			msg.Append(f)
 
-		// float64/double
-		case 'd':
+		case 'd': // float64/double
 			var d float64
 			if err = binary.Read(reader, binary.BigEndian, &d); err != nil {
 				return err
@@ -811,8 +760,7 @@ func readArguments(msg *Message, reader *bufio.Reader, start *int) error {
 			*start += 8
 			msg.Append(d)
 
-		// string
-		case 's':
+		case 's': // string
 			// TODO: fix reading string value
 			var s string
 			if s, _, err = readPaddedString(reader); err != nil {
@@ -821,8 +769,7 @@ func readArguments(msg *Message, reader *bufio.Reader, start *int) error {
 			*start += len(s) + padBytesNeeded(len(s))
 			msg.Append(s)
 
-		// blob
-		case 'b':
+		case 'b': // blob
 			var buf []byte
 			var n int
 			if buf, n, err = readBlob(reader); err != nil {
@@ -831,8 +778,7 @@ func readArguments(msg *Message, reader *bufio.Reader, start *int) error {
 			*start += n
 			msg.Append(buf)
 
-		// OSC Time Tag
-		case 't':
+		case 't': // OSC time tag
 			var tt uint64
 			if err = binary.Read(reader, binary.BigEndian, &tt); err != nil {
 				return nil
@@ -840,12 +786,10 @@ func readArguments(msg *Message, reader *bufio.Reader, start *int) error {
 			*start += 8
 			msg.Append(NewTimetagFromTimetag(tt))
 
-		// True
-		case 'T':
+		case 'T': // true
 			msg.Append(true)
 
-		// False
-		case 'F':
+		case 'F': // false
 			msg.Append(false)
 		}
 	}
@@ -857,7 +801,7 @@ func readArguments(msg *Message, reader *bufio.Reader, start *int) error {
 // Timetag
 ////
 
-// NewTimetag returns a new OSC timetag object.
+// NewTimetag returns a new OSC time tag object.
 func NewTimetag(timeStamp time.Time) *Timetag {
 	return &Timetag{
 		time:     timeStamp,
@@ -865,7 +809,7 @@ func NewTimetag(timeStamp time.Time) *Timetag {
 		MinValue: uint64(1)}
 }
 
-// NewTimetagFromTimetag creates a new Timetag from the given time tag.
+// NewTimetagFromTimetag creates a new Timetag from the given `timetag`.
 func NewTimetagFromTimetag(timetag uint64) *Timetag {
 	time := timetagToTime(timetag)
 	return NewTimetag(time)
@@ -876,14 +820,14 @@ func (t *Timetag) Time() time.Time {
 	return t.time
 }
 
-// FractionalSecond returns the last 32 bits of the Osc Time Tag. Specifies the
+// FractionalSecond returns the last 32 bits of the OSC time tag. Specifies the
 // fractional part of a second.
 func (t *Timetag) FractionalSecond() uint32 {
 	return uint32(t.timeTag << 32)
 }
 
 // SecondsSinceEpoch returns the first 32 bits (the number of seconds since the
-// midnight 1900) from the OSC timetag.
+// midnight 1900) from the OSC time tag.
 func (t *Timetag) SecondsSinceEpoch() uint32 {
 	return uint32(t.timeTag >> 32)
 }
@@ -893,7 +837,7 @@ func (t *Timetag) TimeTag() uint64 {
 	return t.timeTag
 }
 
-// MarshalBinary converts the OSC Time Tag to a byte array.
+// MarshalBinary converts the OSC time tag to a byte array.
 func (t *Timetag) MarshalBinary() ([]byte, error) {
 	data := new(bytes.Buffer)
 	if err := binary.Write(data, binary.BigEndian, t.timeTag); err != nil {
@@ -902,15 +846,15 @@ func (t *Timetag) MarshalBinary() ([]byte, error) {
 	return data.Bytes(), nil
 }
 
-// SetTime sets the value of the OSC Time Tag.
+// SetTime sets the value of the OSC time tag.
 func (t *Timetag) SetTime(time time.Time) {
 	t.time = time
 	t.timeTag = timeToTimetag(time)
 }
 
 // ExpiresIn calculates the number of seconds until the current time is the
-// same as the value of the timetag. It returns zero if the value of the
-// timetag is in the past.
+// same as the value of the time tag. It returns zero if the value of the
+// time tag is in the past.
 func (t *Timetag) ExpiresIn() time.Duration {
 	if t.timeTag <= 1 {
 		return 0
@@ -926,12 +870,32 @@ func (t *Timetag) ExpiresIn() time.Duration {
 	return seconds
 }
 
+// timeToTimetag converts the given time to an OSC time tag.
+//
+// An OSC time tag is defined as follows:
+// Time tags are represented by a 64 bit fixed point number. The first 32 bits
+// specify the number of seconds since midnight on January 1, 1900, and the
+// last 32 bits specify fractional parts of a second to a precision of about
+// 200 picoseconds. This is the representation used by Internet NTP timestamps.
+//
+// The time tag value consisting of 63 zero bits followed by a one in the least
+// significant bit is a special case meaning "immediately."
+func timeToTimetag(time time.Time) (timetag uint64) {
+	timetag = uint64((secondsFrom1900To1970 + time.Unix()) << 32)
+	return (timetag + uint64(uint32(time.Nanosecond())))
+}
+
+// timetagToTime converts the given timetag to a time object.
+func timetagToTime(timetag uint64) (t time.Time) {
+	return time.Unix(int64((timetag>>32)-secondsFrom1900To1970), int64(timetag&0xffffffff))
+}
+
 ////
 // De/Encoding functions
 ////
 
-// readBlob reads an OSC Blob from the blob byte array. Padding bytes are removed
-// from the reader and not returned.
+// readBlob reads an OSC blob from the blob byte array. Padding bytes are
+// removed from the reader and not returned.
 func readBlob(reader *bufio.Reader) ([]byte, int, error) {
 	// First, get the length
 	var blobLen int
@@ -959,8 +923,8 @@ func readBlob(reader *bufio.Reader) ([]byte, int, error) {
 	return blob, n, nil
 }
 
-// writeBlob writes the data byte array as an OSC blob into buff. If the length of
-// data isn't 32-bit aligned, padding bytes will be added.
+// writeBlob writes the data byte array as an OSC blob into buff. If the length
+// of data isn't 32-bit aligned, padding bytes will be added.
 func writeBlob(data []byte, buf *bytes.Buffer) (int, error) {
 	// Add the size of the blob
 	dlen := int32(len(data))
@@ -987,8 +951,8 @@ func writeBlob(data []byte, buf *bytes.Buffer) (int, error) {
 	return 4 + len(data) + numPadBytes, nil
 }
 
-// readPaddedString reads a padded string from the given reader. The padding bytes
-// are removed from the reader.
+// readPaddedString reads a padded string from the given reader. The padding
+// bytes are removed from the reader.
 func readPaddedString(reader *bufio.Reader) (string, int, error) {
 	// Read the string from the reader
 	str, err := reader.ReadString(0)
@@ -1045,30 +1009,6 @@ func padBytesNeeded(elementLen int) int {
 }
 
 ////
-// Timetag utility functions
-////
-
-// timeToTimetag converts the given time to an OSC timetag.
-//
-// An OSC timetage is defined as follows:
-// Time tags are represented by a 64 bit fixed point number. The first 32 bits
-// specify the number of seconds since midnight on January 1, 1900, and the
-// last 32 bits specify fractional parts of a second to a precision of about
-// 200 picoseconds. This is the representation used by Internet NTP timestamps.
-//
-// The time tag value consisting of 63 zero bits followed by a one in the least
-// signifigant bit is a special case meaning "immediately."
-func timeToTimetag(time time.Time) (timetag uint64) {
-	timetag = uint64((secondsFrom1900To1970 + time.Unix()) << 32)
-	return (timetag + uint64(uint32(time.Nanosecond())))
-}
-
-// timetagToTime converts the given timetag to a time object.
-func timetagToTime(timetag uint64) (t time.Time) {
-	return time.Unix(int64((timetag>>32)-secondsFrom1900To1970), int64(timetag&0xffffffff))
-}
-
-////
 // Utility and helper functions
 ////
 
@@ -1077,21 +1017,21 @@ func PrintMessage(msg *Message) {
 	fmt.Println(msg)
 }
 
-// existsAddress returns true if the OSC address s is found in handlers. Otherwise, false.
-func existsAddress(s string, handlers map[string]Handler) bool {
+// addressExists returns true if the OSC address `addr` is found in `handlers`.
+func addressExists(addr string, handlers map[string]Handler) bool {
 	for h := range handlers {
-		if h == s {
+		if h == addr {
 			return true
 		}
 	}
 	return false
 }
 
-// getRegEx compiles and returns a regular expression object for the given address
-// pattern.
+// getRegEx compiles and returns a regular expression object for the given
+// address `pattern`.
 func getRegEx(pattern string) *regexp.Regexp {
 	for _, trs := range []struct {
-		old, new string // old, new
+		old, new string
 	}{
 		{".", `\.`}, // Escape all '.' in the pattern
 		{"(", `\(`}, // Escape all '(' in the pattern
