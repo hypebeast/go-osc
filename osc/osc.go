@@ -121,11 +121,6 @@ func (s *OscDispatcher) AddMsgHandler(addr string, handler HandlerFunc) error {
 		s.defaultHandler = handler
 		return nil
 	}
-	for _, chr := range "*?,[]{}# " {
-		if strings.Contains(addr, fmt.Sprintf("%c", chr)) {
-			return errors.New("OSC Address string may not contain any characters in \"*?,[]{}# \n")
-		}
-	}
 
 	if addressExists(addr, s.handlers) {
 		return errors.New("OSC address exists already")
@@ -212,8 +207,8 @@ func (msg *Message) ClearData() {
 // Match returns true, if the address of the OSC Message matches the given
 // address. The match is case sensitive!
 func (msg *Message) Match(addr string) bool {
-	exp := getRegEx(msg.Address)
-	if exp.MatchString(addr) {
+	exp := getRegEx(addr)
+	if exp.MatchString(msg.Address) {
 		return true
 	}
 	return false
