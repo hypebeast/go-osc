@@ -898,11 +898,11 @@ func timetagToTime(timetag uint64) (t time.Time) {
 // removed from the reader and not returned.
 func readBlob(reader *bufio.Reader) ([]byte, int, error) {
 	// First, get the length
-	var blobLen int
+	var blobLen int32
 	if err := binary.Read(reader, binary.BigEndian, &blobLen); err != nil {
 		return nil, 0, err
 	}
-	n := 4 + blobLen
+	n := 4 + int(blobLen)
 
 	// Read the data
 	blob := make([]byte, blobLen)
@@ -911,7 +911,7 @@ func readBlob(reader *bufio.Reader) ([]byte, int, error) {
 	}
 
 	// Remove the padding bytes
-	numPadBytes := padBytesNeeded(blobLen)
+	numPadBytes := padBytesNeeded(int(blobLen))
 	if numPadBytes > 0 {
 		n += numPadBytes
 		dummy := make([]byte, numPadBytes)
