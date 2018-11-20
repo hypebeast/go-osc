@@ -66,7 +66,7 @@ func TestMessage_TypeTags(t *testing.T) {
 			continue
 		}
 		if err == nil && !tt.ok {
-			t.Errorf("%s: TypeTags() expected an error")
+			t.Errorf("%s: TypeTags() expected an error", tt.desc)
 			continue
 		}
 		if !tt.ok {
@@ -326,7 +326,7 @@ func TestReadPaddedString(t *testing.T) {
 			t.Errorf("%s: Bytes needed don't match; got = %d, want = %d", tt.s, got, want)
 		}
 		if got, want := s, tt.s; got != want {
-			t.Errorf("%s: Strings don't match; got = %d, want = %d", tt.s, got, want)
+			t.Errorf("%s: Strings don't match; got = %s, want = %s", tt.s, got, want)
 		}
 	}
 }
