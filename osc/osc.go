@@ -1,4 +1,4 @@
-// go-osc provides a package for sending and receiving OpenSoundControl
+// Package osc provides a package for sending and receiving OpenSoundControl
 // messages. The package is implemented in pure Go.
 package osc
 
@@ -123,7 +123,7 @@ func (s *OscDispatcher) AddMsgHandler(addr string, handler HandlerFunc) error {
 	}
 	for _, chr := range "*?,[]{}# " {
 		if strings.Contains(addr, fmt.Sprintf("%c", chr)) {
-			return errors.New("OSC Address string may not contain any characters in \"*?,[]{}# \n")
+			return errors.New("OSC Address string may not contain any characters in \"*?,[]{}#")
 		}
 	}
 
@@ -391,7 +391,7 @@ func NewBundle(time time.Time) *Bundle {
 func (b *Bundle) Append(pck Packet) error {
 	switch t := pck.(type) {
 	default:
-		return fmt.Errorf("Unsupported OSC packet type: only Bundle and Message are supported.")
+		return fmt.Errorf("unsupported OSC packet type: only Bundle and Message are supported")
 
 	case *Bundle:
 		b.Bundles = append(b.Bundles, t)
@@ -482,7 +482,7 @@ func NewClient(ip string, port int) *Client {
 // IP returns the IP address.
 func (c *Client) IP() string { return c.ip }
 
-// SetIp sets a new IP address.
+// SetIP sets a new IP address.
 func (c *Client) SetIP(ip string) { c.ip = ip }
 
 // Port returns the port.
@@ -604,6 +604,7 @@ func (s *Server) readFromConnection(c net.PacketConn) (Packet, error) {
 	return p, nil
 }
 
+// ParsePacket parses the given msg string and returns a Packet
 func ParsePacket(msg string) (Packet, error) {
 	var start int
 	p, err := readPacket(bufio.NewReader(bytes.NewBufferString(msg)), &start, len(msg))

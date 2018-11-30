@@ -1,7 +1,7 @@
 // Copyright 2013 - 2015 Sebastian Ruml <sebastian.ruml@gmail.com>
 
 /*
-Package go-osc provides a client and server for sending and receiving
+Package osc provides a client and server for sending and receiving
 OpenSoundControl messages.
 
 The package is implemented in pure Go.
