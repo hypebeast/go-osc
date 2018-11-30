@@ -575,8 +575,6 @@ func (s *Server) Serve(c net.PacketConn) error {
 		tempDelay = 0
 		go s.Dispatcher.Dispatch(msg)
 	}
-
-	return nil
 }
 
 // ReceivePacket listens for incoming OSC packets and returns the packet if one is received.
