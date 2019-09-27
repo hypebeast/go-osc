@@ -61,7 +61,7 @@ type Client struct {
 // incoming OSC packets and bundles.
 type Server struct {
 	Addr        string
-	Dispatcher  *OscDispatcher
+	Dispatcher  Dispatcher
 	ReadTimeout time.Duration
 }
 
@@ -81,6 +81,7 @@ type Timetag struct {
 // responsible for dispatching received OSC messages.
 type Dispatcher interface {
 	Dispatch(packet Packet)
+	AddMsgHandler(addr string, f HandlerFunc) error
 }
 
 // Handler is an interface for message handlers. Every handler implementation
