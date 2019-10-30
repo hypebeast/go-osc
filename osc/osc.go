@@ -137,28 +137,26 @@ func (s *OscDispatcher) AddMsgHandler(addr string, handler HandlerFunc) error {
 
 // Dispatch dispatches OSC packets. Implements the Dispatcher interface.
 func (s *OscDispatcher) Dispatch(packet Packet) {
-	switch packet.(type) {
+	switch p := packet.(type) {
 	default:
 		return
 
 	case *Message:
-		msg, _ := packet.(*Message)
 		for addr, handler := range s.handlers {
-			if msg.Match(addr) {
-				handler.HandleMessage(msg)
+			if p.Match(addr) {
+				handler.HandleMessage(p)
 			}
 		}
 		if s.defaultHandler != nil {
-			s.defaultHandler.HandleMessage(msg)
+			s.defaultHandler.HandleMessage(p)
 		}
 
 	case *Bundle:
-		bundle, _ := packet.(*Bundle)
-		timer := time.NewTimer(bundle.Timetag.ExpiresIn())
+		timer := time.NewTimer(p.Timetag.ExpiresIn())
 
 		go func() {
 			<-timer.C
-			for _, message := range bundle.Messages {
+			for _, message := range p.Messages {
 				for address, handler := range s.handlers {
 					if message.Match(address) {
 						handler.HandleMessage(message)
@@ -170,7 +168,7 @@ func (s *OscDispatcher) Dispatch(packet Packet) {
 			}
 
 			// Process all bundles
-			for _, b := range bundle.Bundles {
+			for _, b := range p.Bundles {
 				s.Dispatch(b)
 			}
 		}()
