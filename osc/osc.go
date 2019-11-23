@@ -72,9 +72,10 @@ type Client struct {
 // Server represents an OSC server. The server listens on Address and Port for
 // incoming OSC packets and bundles.
 type Server struct {
-	Addr        string
-	Dispatcher  *OscDispatcher
-	ReadTimeout time.Duration
+	Addr            string
+	Dispatcher      *OscDispatcher
+	ReadTimeout     time.Duration
+	networkProtocol NetworkProtocol
 }
 
 // Timetag represents an OSC Time Tag.
@@ -549,6 +550,31 @@ func (c *Client) Send(packet Packet) error {
 ////
 // Server
 ////
+
+// NewServer creates a new OSC client. The Server is used to send OSC
+// messages and OSC bundles over an UDP network connection. The `ip` argument
+// specifies the IP address and `port` defines the target port where the
+// messages and bundles will be send to.
+func NewServer(
+	addr string, dispatcher *OscDispatcher, readTimeout time.Duration,
+) *Server {
+	return &Server{
+		Addr:            addr,
+		Dispatcher:      dispatcher,
+		ReadTimeout:     readTimeout,
+		networkProtocol: UDP,
+	}
+}
+
+// NetworkProtocol returns the network protocol.
+func (s *Server) NetworkProtocol() NetworkProtocol {
+	return s.networkProtocol
+}
+
+// SetNetworkProtocol sets the network protocol.
+func (s *Server) SetNetworkProtocol(protocol NetworkProtocol) {
+	s.networkProtocol = protocol
+}
 
 // Handle registers a new message handler function for an OSC address. The
 // handler is the function called for incoming OscMessages that match 'address'.
