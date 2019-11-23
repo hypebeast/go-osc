@@ -3,6 +3,7 @@ package osc
 import (
 	"bufio"
 	"bytes"
+	"math/rand"
 	"net"
 	"reflect"
 	"strconv"
@@ -172,7 +173,9 @@ func TestServerMessageDispatching(t *testing.T) {
 	done.Wait()
 }
 
-func testServerMessageReceiving(t *testing.T, protocol NetworkProtocol) {
+func testServerMessageReceiving(
+	t *testing.T, protocol NetworkProtocol, stringArgument string,
+) {
 	port := 6677
 
 	finish := make(chan bool)
@@ -223,14 +226,17 @@ func testServerMessageReceiving(t *testing.T, protocol NetworkProtocol) {
 		}
 
 		msg := packet.(*Message)
-		if msg.CountArguments() != 2 {
-			t.Errorf("Argument length should be 2 and is: %d\n", msg.CountArguments())
+		if msg.CountArguments() != 3 {
+			t.Errorf("Argument length should be 3 and is: %d\n", msg.CountArguments())
 		}
 		if msg.Arguments[0].(int32) != 1122 {
 			t.Error("Argument should be 1122 and is: " + string(msg.Arguments[0].(int32)))
 		}
 		if msg.Arguments[1].(int32) != 3344 {
 			t.Error("Argument should be 3344 and is: " + string(msg.Arguments[1].(int32)))
+		}
+		if msg.Arguments[2].(string) != stringArgument {
+			t.Errorf("Argument should be %s and is: " + msg.Arguments[2].(string))
 		}
 
 		finish <- true
@@ -247,6 +253,7 @@ func testServerMessageReceiving(t *testing.T, protocol NetworkProtocol) {
 			msg := NewMessage("/address/test")
 			msg.Append(int32(1122))
 			msg.Append(int32(3344))
+			msg.Append(stringArgument)
 			time.Sleep(500 * time.Millisecond)
 			client.Send(msg)
 		}
@@ -263,12 +270,24 @@ func testServerMessageReceiving(t *testing.T, protocol NetworkProtocol) {
 	done.Wait()
 }
 
+// source: https://www.calhoun.io/creating-random-strings-in-go/
+func randomString(length int) string {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	var seededRand = rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	b := make([]byte, length)
+	for i := range b {
+		b[i] = charset[seededRand.Intn(len(charset))]
+	}
+	return string(b)
+}
+
 func TestServerMessageReceivingUDP(t *testing.T) {
-	testServerMessageReceiving(t, UDP)
+	testServerMessageReceiving(t, UDP, randomString(500))
 }
 
 func TestServerMessageReceivingTCP(t *testing.T) {
-	testServerMessageReceiving(t, TCP)
+	testServerMessageReceiving(t, TCP, randomString(100000))
 }
 
 func TestReadTimeout(t *testing.T) {
