@@ -21,6 +21,17 @@ const (
 	bundleTagString       = "#bundle"
 )
 
+// NetworkProtocol represents a network protocol that can be used to transport
+// OSC messages.
+type NetworkProtocol int
+
+const (
+	// UDP represents the UDP network protocol.
+	UDP NetworkProtocol = iota
+	// TCP represents the TCP network protocol.
+	TCP
+)
+
 // Packet is the interface for Message and Bundle.
 type Packet interface {
 	encoding.BinaryMarshaler
@@ -52,9 +63,10 @@ var _ Packet = (*Bundle)(nil)
 // Client enables you to send OSC packets. It sends OSC messages and bundles to
 // the given IP address and port.
 type Client struct {
-	ip    string
-	port  int
-	laddr *net.UDPAddr
+	ip              string
+	port            int
+	laddr           *net.UDPAddr
+	networkProtocol NetworkProtocol
 }
 
 // Server represents an OSC server. The server listens on Address and Port for
@@ -476,7 +488,7 @@ func (b *Bundle) MarshalBinary() ([]byte, error) {
 // specifies the IP address and `port` defines the target port where the
 // messages and bundles will be send to.
 func NewClient(ip string, port int) *Client {
-	return &Client{ip: ip, port: port, laddr: nil}
+	return &Client{ip: ip, port: port, laddr: nil, networkProtocol: UDP}
 }
 
 // IP returns the IP address.
@@ -499,6 +511,16 @@ func (c *Client) SetLocalAddr(ip string, port int) error {
 	}
 	c.laddr = laddr
 	return nil
+}
+
+// NetworkProtocol returns the network protocol.
+func (c *Client) NetworkProtocol() NetworkProtocol {
+	return c.networkProtocol
+}
+
+// SetNetworkProtocol sets the network protocol.
+func (c *Client) SetNetworkProtocol(protocol NetworkProtocol) {
+	c.networkProtocol = protocol
 }
 
 // Send sends an OSC Bundle or an OSC Message.
