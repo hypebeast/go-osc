@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"net"
 	"reflect"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -171,7 +172,9 @@ func TestServerMessageDispatching(t *testing.T) {
 	done.Wait()
 }
 
-func TestServerMessageReceiving(t *testing.T) {
+func testServerMessageReceiving(t *testing.T, protocol NetworkProtocol) {
+	port := 6677
+
 	finish := make(chan bool)
 	start := make(chan bool)
 	done := sync.WaitGroup{}
@@ -180,18 +183,38 @@ func TestServerMessageReceiving(t *testing.T) {
 	// Start the server in a go-routine
 	go func() {
 		server := &Server{}
-		c, err := net.ListenPacket("udp", "localhost:6677")
-		if err != nil {
-			t.Fatal(err)
+		server.SetNetworkProtocol(protocol)
+
+		var receivePacket func() (Packet, error)
+		switch protocol {
+		case UDP:
+			receivePacket = func() (Packet, error) {
+				c, err := net.ListenPacket("udp", "localhost:"+strconv.Itoa(port))
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer c.Close()
+
+				return server.ReceivePacket(c)
+			}
+		case TCP:
+			receivePacket = func() (Packet, error) {
+				l, err := net.Listen("tcp", ":"+strconv.Itoa(port))
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer l.Close()
+
+				return server.ReceiveTCPPacket(l)
+			}
 		}
-		defer c.Close()
 
 		// Start the client
 		start <- true
 
-		packet, err := server.ReceivePacket(c)
+		packet, err := receivePacket()
 		if err != nil {
-			t.Error("Server error")
+			t.Errorf("Server error: %s", err.Error())
 			return
 		}
 		if packet == nil {
@@ -210,7 +233,6 @@ func TestServerMessageReceiving(t *testing.T) {
 			t.Error("Argument should be 3344 and is: " + string(msg.Arguments[1].(int32)))
 		}
 
-		c.Close()
 		finish <- true
 	}()
 
@@ -220,6 +242,8 @@ func TestServerMessageReceiving(t *testing.T) {
 		case <-timeout:
 		case <-start:
 			client := NewClient("localhost", 6677)
+			client.SetNetworkProtocol(protocol)
+
 			msg := NewMessage("/address/test")
 			msg.Append(int32(1122))
 			msg.Append(int32(3344))
@@ -237,6 +261,14 @@ func TestServerMessageReceiving(t *testing.T) {
 	}()
 
 	done.Wait()
+}
+
+func TestServerMessageReceivingUDP(t *testing.T) {
+	testServerMessageReceiving(t, UDP)
+}
+
+func TestServerMessageReceivingTCP(t *testing.T) {
+	testServerMessageReceiving(t, TCP)
 }
 
 func TestReadTimeout(t *testing.T) {

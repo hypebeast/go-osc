@@ -652,6 +652,34 @@ func (s *Server) readFromConnection(c net.PacketConn) (Packet, error) {
 	return p, nil
 }
 
+// ReceiveTCPPacket listens for incoming OSC packets and returns the packet if
+// one is received.
+func (s *Server) ReceiveTCPPacket(l net.Listener) (Packet, error) {
+	conn, err := l.Accept()
+	if err != nil {
+		return nil, err
+	}
+
+	if s.ReadTimeout != 0 {
+		if err := conn.SetReadDeadline(time.Now().Add(s.ReadTimeout)); err != nil {
+			return nil, err
+		}
+	}
+
+	data := make([]byte, 65535)
+	n, err := conn.Read(data)
+	if err != nil {
+		return nil, err
+	}
+
+	var start int
+	p, err := readPacket(bufio.NewReader(bytes.NewBuffer(data)), &start, n)
+	if err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
 // ParsePacket parses the given msg string and returns a Packet
 func ParsePacket(msg string) (Packet, error) {
 	var start int
