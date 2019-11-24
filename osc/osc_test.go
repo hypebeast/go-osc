@@ -255,7 +255,12 @@ func testServerMessageReceiving(
 			msg.Append(int32(3344))
 			msg.Append(stringArgument)
 			time.Sleep(500 * time.Millisecond)
-			client.Send(msg)
+			if err := client.Send(msg); err != nil {
+				t.Error(err)
+				done.Done()
+				done.Done()
+				return
+			}
 		}
 
 		done.Done()
