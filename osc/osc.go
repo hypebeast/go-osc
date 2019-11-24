@@ -67,6 +67,7 @@ type Client struct {
 	ip              string
 	port            int
 	laddr           *net.UDPAddr
+	laddrTCP        *net.TCPAddr
 	networkProtocol NetworkProtocol
 }
 
@@ -511,11 +512,21 @@ func (c *Client) SetPort(port int) { c.port = port }
 
 // SetLocalAddr sets the local address.
 func (c *Client) SetLocalAddr(ip string, port int) error {
-	laddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", ip, port))
-	if err != nil {
-		return err
+	switch c.networkProtocol {
+	case UDP:
+		laddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", ip, port))
+		if err != nil {
+			return err
+		}
+		c.laddr = laddr
+	case TCP:
+		laddrTCP, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", ip, port))
+		if err != nil {
+			return err
+		}
+		c.laddrTCP = laddrTCP
 	}
-	c.laddr = laddr
+
 	return nil
 }
 
