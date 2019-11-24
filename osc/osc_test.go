@@ -298,6 +298,16 @@ func randomString(length int) string {
 }
 
 func TestServerMessageReceivingUDP(t *testing.T) {
+	// Attempting to send a message larger than this (the exact threshold depends
+	// on your OS, etc.) results in an error like:
+	//
+	//   write udp 127.0.0.1:52496->127.0.0.1:6677: write: message too long
+	//
+	// This is expected for UDP. The practical guaranteed packet size limit for
+	// UDP is 576 bytes, and some of that is taken up by protocol overhead.
+	//
+	// Reference:
+	// https://forum.juce.com/t/osc-blobs-are-lost-above-certain-size/20241/2
 	testServerMessageReceiving(t, UDP, randomString(500))
 }
 
