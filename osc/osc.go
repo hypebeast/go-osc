@@ -9,6 +9,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"reflect"
 	"regexp"
@@ -666,14 +667,14 @@ func (s *Server) ReceiveTCPPacket(l net.Listener) (Packet, error) {
 		}
 	}
 
-	data := make([]byte, 65535)
-	n, err := conn.Read(data)
+	data, err := ioutil.ReadAll(conn)
 	if err != nil {
 		return nil, err
 	}
 
 	var start int
-	p, err := readPacket(bufio.NewReader(bytes.NewBuffer(data)), &start, n)
+	end := len(data)
+	p, err := readPacket(bufio.NewReader(bytes.NewBuffer(data)), &start, end)
 	if err != nil {
 		return nil, err
 	}
