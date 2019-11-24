@@ -542,24 +542,42 @@ func (c *Client) SetNetworkProtocol(protocol NetworkProtocol) {
 
 // Send sends an OSC Bundle or an OSC Message.
 func (c *Client) Send(packet Packet) error {
-	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", c.ip, c.port))
-	if err != nil {
-		return err
-	}
-	conn, err := net.DialUDP("udp", c.laddr, addr)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
 	data, err := packet.MarshalBinary()
 	if err != nil {
 		return err
 	}
 
-	if _, err = conn.Write(data); err != nil {
-		return err
+	switch c.networkProtocol {
+	case UDP:
+		addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", c.ip, c.port))
+		if err != nil {
+			return err
+		}
+		conn, err := net.DialUDP("udp", c.laddr, addr)
+		if err != nil {
+			return err
+		}
+		defer conn.Close()
+
+		if _, err = conn.Write(data); err != nil {
+			return err
+		}
+	case TCP:
+		addr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", c.ip, c.port))
+		if err != nil {
+			return err
+		}
+		conn, err := net.DialTCP("tcp", c.laddrTCP, addr)
+		if err != nil {
+			return err
+		}
+		defer conn.Close()
+
+		if _, err = conn.Write(data); err != nil {
+			return err
+		}
 	}
+
 	return nil
 }
 
