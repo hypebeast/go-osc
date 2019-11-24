@@ -235,8 +235,18 @@ func testServerMessageReceiving(
 		if msg.Arguments[1].(int32) != 3344 {
 			t.Error("Argument should be 3344 and is: " + string(msg.Arguments[1].(int32)))
 		}
-		if msg.Arguments[2].(string) != stringArgument {
-			t.Errorf("Argument should be %s and is: " + msg.Arguments[2].(string))
+
+		receivedString := msg.Arguments[2].(string)
+		if len(receivedString) != len(stringArgument) {
+			t.Errorf(
+				"String argument length should be %d and is %d",
+				len(stringArgument),
+				len(receivedString),
+			)
+		} else if receivedString != stringArgument {
+			t.Errorf(
+				"Argument should be %s and is: %s", stringArgument, receivedString,
+			)
 		}
 
 		finish <- true
