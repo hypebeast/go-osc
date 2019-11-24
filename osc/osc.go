@@ -486,9 +486,13 @@ func (b *Bundle) MarshalBinary() ([]byte, error) {
 ////
 
 // NewClient creates a new OSC client. The Client is used to send OSC
-// messages and OSC bundles over an UDP network connection. The `ip` argument
-// specifies the IP address and `port` defines the target port where the
-// messages and bundles will be send to.
+// messages and OSC bundles over a network connection.
+//
+// The default network protocol is UDP. To use TCP instead, use
+// client.SetNetworkProtocol(TCP).
+//
+// The `ip` argument specifies the IP address and `port` defines the target port
+// where the messages and bundles will be send to.
 func NewClient(ip string, port int) *Client {
 	return &Client{ip: ip, port: port, laddr: nil, networkProtocol: UDP}
 }
@@ -552,10 +556,11 @@ func (c *Client) Send(packet Packet) error {
 // Server
 ////
 
-// NewServer creates a new OSC client. The Server is used to send OSC
-// messages and OSC bundles over an UDP network connection. The `ip` argument
-// specifies the IP address and `port` defines the target port where the
-// messages and bundles will be send to.
+// NewServer creates a new OSC server. The server receives OSC messages and
+// bundles over a network connection.
+//
+// The default network protocol is UDP. To use TCP instead, use
+// server.SetNetworkProtocol(TCP).
 func NewServer(
 	addr string, dispatcher *OscDispatcher, readTimeout time.Duration,
 ) *Server {
