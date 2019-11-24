@@ -312,7 +312,7 @@ func TestServerMessageReceivingUDP(t *testing.T) {
 }
 
 func TestServerMessageReceivingTCP(t *testing.T) {
-	testServerMessageReceiving(t, TCP, randomString(100000))
+	testServerMessageReceiving(t, TCP, randomString(1000000))
 }
 
 func TestReadTimeout(t *testing.T) {
