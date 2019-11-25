@@ -78,6 +78,8 @@ type Server struct {
 	Dispatcher      *OscDispatcher
 	ReadTimeout     time.Duration
 	networkProtocol NetworkProtocol
+	udpConnection   net.PacketConn
+	tcpListener     net.Listener
 }
 
 // Timetag represents an OSC Time Tag.
@@ -661,6 +663,7 @@ func (s *Server) serve(readPacket func() (Packet, error)) error {
 // Serve retrieves incoming OSC packets from the given connection and dispatches
 // retrieved OSC packets. If something goes wrong an error is returned.
 func (s *Server) Serve(c net.PacketConn) error {
+	s.udpConnection = c
 	return s.serve(func() (Packet, error) { return s.readFromConnection(c) })
 }
 
@@ -668,7 +671,21 @@ func (s *Server) Serve(c net.PacketConn) error {
 // dispatches retrieved OSC packets. If something goes wrong an error is
 // returned.
 func (s *Server) ServeTCP(l net.Listener) error {
+	s.tcpListener = l
 	return s.serve(func() (Packet, error) { return s.ReceiveTCPPacket(l) })
+}
+
+// CloseConnection forcibly closes a server's connection.
+//
+// This causes a "use of closed network connection" error the next time the
+// server attempts to read from the connection.
+func (s *Server) CloseConnection() {
+	switch s.networkProtocol {
+	case UDP:
+		s.udpConnection.Close()
+	case TCP:
+		s.tcpListener.Close()
+	}
 }
 
 // ReceivePacket listens for incoming OSC packets and returns the packet if one is received.

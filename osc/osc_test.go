@@ -114,19 +114,16 @@ func TestHandleWithInvalidAddress(t *testing.T) {
 	}
 }
 
-// These tests use the implementation-level functions server.Serve /
-// server.ServeTCP, instead of the API-level server.ListenAndServe.
+// These tests stop the server by forcibly closing the connection, which causes
+// a "use of closed network connection" error the next time we try to read from
+// the connection. As a workaround, this wraps server.ListenAndServe() in an
+// error-handling layer that doesn't consider "use of closed network connection"
+// an error.
 //
-// server.Serve and server.ServeTCP take as arguments things that need to be
-// closed (net.PacketConn, net.Listener), and the tests stop the server by
-// abruptly closing them. This causes a "use of closed network connection" error
-// the next time we try to read from the connection.
-//
-// Open question: is this desired behavior, or should server.Serve and
-// server.ServeTCP return successfully in cases where they would otherwise throw
-// this error?
-func serveUntilInterrupted(serve func() error) error {
-	if err := serve(); err != nil &&
+// Open question: is this desired behavior, or should server.serve return
+// successfully in cases where it would otherwise throw this error?
+func serveUntilInterrupted(server *Server) error {
+	if err := server.ListenAndServe(); err != nil &&
 		!strings.Contains(err.Error(), "use of closed network connection") {
 		return err
 	}
@@ -143,78 +140,37 @@ func testServerMessageDispatching(t *testing.T, protocol NetworkProtocol) {
 	port := 6677
 	addr := "localhost:" + strconv.Itoa(port)
 
-	var startServer func() error
-	stopServer := func() {}
-	defer stopServer()
+	server := &Server{Addr: addr}
+	server.SetNetworkProtocol(protocol)
+	defer server.CloseConnection()
 
-	// Start the OSC server in a new go-routine
+	if err := server.Handle("/address/test", func(msg *Message) {
+		defer func() {
+			server.CloseConnection()
+			finish <- true
+		}()
+
+		if len(msg.Arguments) != 1 {
+			t.Error("Argument length should be 1 and is: " + string(len(msg.Arguments)))
+		}
+
+		if msg.Arguments[0].(int32) != 1122 {
+			t.Error("Argument should be 1122 and is: " + string(msg.Arguments[0].(int32)))
+		}
+	}); err != nil {
+		t.Error("Error adding message handler")
+	}
+
+	// Server goroutine
 	go func() {
-		server := &Server{Addr: addr}
-		server.SetNetworkProtocol(protocol)
-
-		switch protocol {
-		case UDP:
-			startServer = func() error {
-				c, err := net.ListenPacket("udp", addr)
-				if err != nil {
-					return err
-				}
-
-				stopServer = func() { c.Close() }
-
-				// We could ideally just do this:
-				// return server.Serve(conn)
-				if err := serveUntilInterrupted(
-					func() error { return server.Serve(c) },
-				); err != nil {
-					return err
-				}
-
-				return nil
-			}
-		case TCP:
-			startServer = func() error {
-				l, err := net.Listen("tcp", ":"+strconv.Itoa(port))
-				if err != nil {
-					return err
-				}
-				stopServer = func() { l.Close() }
-
-				// We could ideally just do this:
-				// return server.ServeTCP(l)
-				if err := serveUntilInterrupted(
-					func() error { return server.ServeTCP(l) },
-				); err != nil {
-					return err
-				}
-
-				return nil
-			}
-		}
-
-		if err := server.Handle("/address/test", func(msg *Message) {
-			defer func() {
-				stopServer()
-				finish <- true
-			}()
-
-			if len(msg.Arguments) != 1 {
-				t.Error("Argument length should be 1 and is: " + string(len(msg.Arguments)))
-			}
-
-			if msg.Arguments[0].(int32) != 1122 {
-				t.Error("Argument should be 1122 and is: " + string(msg.Arguments[0].(int32)))
-			}
-		}); err != nil {
-			t.Error("Error adding message handler")
-		}
-
 		start <- true
-		if err := startServer(); err != nil {
+
+		if err := serveUntilInterrupted(server); err != nil {
 			t.Errorf("error during Serve: %s", err.Error())
 		}
 	}()
 
+	// Client goroutine
 	go func() {
 		timeout := time.After(5 * time.Second)
 		select {
