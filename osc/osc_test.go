@@ -138,7 +138,7 @@ func testServerMessageDispatching(t *testing.T, protocol NetworkProtocol) {
 			startServer = func() error {
 				c, err := net.ListenPacket("udp", addr)
 				if err != nil {
-					t.Fatal(err)
+					return err
 				}
 
 				stopServer = func() { c.Close() }
@@ -239,7 +239,7 @@ func testServerMessageReceiving(
 			receivePacket = func() (Packet, error) {
 				c, err := net.ListenPacket("udp", "localhost:"+strconv.Itoa(port))
 				if err != nil {
-					t.Fatal(err)
+					return nil, err
 				}
 				defer c.Close()
 
@@ -249,7 +249,7 @@ func testServerMessageReceiving(
 			receivePacket = func() (Packet, error) {
 				l, err := net.Listen("tcp", ":"+strconv.Itoa(port))
 				if err != nil {
-					t.Fatal(err)
+					return nil, err
 				}
 				defer l.Close()
 
