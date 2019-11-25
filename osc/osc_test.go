@@ -3,7 +3,6 @@ package osc
 import (
 	"bufio"
 	"bytes"
-	"fmt"
 	"math/rand"
 	"net"
 	"reflect"
@@ -115,6 +114,26 @@ func TestHandleWithInvalidAddress(t *testing.T) {
 	}
 }
 
+// These tests use the implementation-level functions server.Serve /
+// server.ServeTCP, instead of the API-level server.ListenAndServe.
+//
+// server.Serve and server.ServeTCP take as arguments things that need to be
+// closed (net.PacketConn, net.Listener), and the tests stop the server by
+// abruptly closing them. This causes a "use of closed network connection" error
+// the next time we try to read from the connection.
+//
+// Open question: is this desired behavior, or should server.Serve and
+// server.ServeTCP return successfully in cases where they would otherwise throw
+// this error?
+func serveUntilInterrupted(serve func() error) error {
+	if err := serve(); err != nil &&
+		!strings.Contains(err.Error(), "use of closed network connection") {
+		return err
+	}
+
+	return nil
+}
+
 func testServerMessageDispatching(t *testing.T, protocol NetworkProtocol) {
 	finish := make(chan bool)
 	start := make(chan bool)
@@ -144,17 +163,10 @@ func testServerMessageDispatching(t *testing.T, protocol NetworkProtocol) {
 				stopServer = func() { c.Close() }
 
 				// We could ideally just do this:
-				//
 				// return server.Serve(conn)
-				//
-				// ...but closing the connection causes a "use of closed network
-				// connection" error the next time we try to read from the connection.
-				//
-				// Open question: is this desired behavior, or should server.Serve
-				// return successfully in cases where it would otherwise throw this
-				// error?
-				if err := server.Serve(c); err != nil &&
-					!strings.Contains(err.Error(), "use of closed network connection") {
+				if err := serveUntilInterrupted(
+					func() error { return server.Serve(c) },
+				); err != nil {
 					return err
 				}
 
@@ -162,7 +174,21 @@ func testServerMessageDispatching(t *testing.T, protocol NetworkProtocol) {
 			}
 		case TCP:
 			startServer = func() error {
-				return fmt.Errorf("TODO: implement")
+				l, err := net.Listen("tcp", ":"+strconv.Itoa(port))
+				if err != nil {
+					return err
+				}
+				stopServer = func() { l.Close() }
+
+				// We could ideally just do this:
+				// return server.ServeTCP(l)
+				if err := serveUntilInterrupted(
+					func() error { return server.ServeTCP(l) },
+				); err != nil {
+					return err
+				}
+
+				return nil
 			}
 		}
 
@@ -216,6 +242,10 @@ func testServerMessageDispatching(t *testing.T, protocol NetworkProtocol) {
 
 func TestServerMessageDispatchingUDP(t *testing.T) {
 	testServerMessageDispatching(t, UDP)
+}
+
+func TestServerMessageDispatchingTCP(t *testing.T) {
+	testServerMessageDispatching(t, TCP)
 }
 
 func testServerMessageReceiving(

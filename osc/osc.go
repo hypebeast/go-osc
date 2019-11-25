@@ -634,12 +634,10 @@ func (s *Server) ListenAndServe() error {
 	return s.Serve(ln)
 }
 
-// Serve retrieves incoming OSC packets from the given connection and dispatches
-// retrieved OSC packets. If something goes wrong an error is returned.
-func (s *Server) Serve(c net.PacketConn) error {
+func (s *Server) serve(readPacket func() (Packet, error)) error {
 	var tempDelay time.Duration
 	for {
-		msg, err := s.readFromConnection(c)
+		msg, err := readPacket()
 		if err != nil {
 			if ne, ok := err.(net.Error); ok && ne.Temporary() {
 				if tempDelay == 0 {
@@ -658,6 +656,19 @@ func (s *Server) Serve(c net.PacketConn) error {
 		tempDelay = 0
 		go s.Dispatcher.Dispatch(msg)
 	}
+}
+
+// Serve retrieves incoming OSC packets from the given connection and dispatches
+// retrieved OSC packets. If something goes wrong an error is returned.
+func (s *Server) Serve(c net.PacketConn) error {
+	return s.serve(func() (Packet, error) { return s.readFromConnection(c) })
+}
+
+// ServeTCP retrieves incoming OSC packets from the given connection and
+// dispatches retrieved OSC packets. If something goes wrong an error is
+// returned.
+func (s *Server) ServeTCP(l net.Listener) error {
+	return s.serve(func() (Packet, error) { return s.ReceiveTCPPacket(l) })
 }
 
 // ReceivePacket listens for incoming OSC packets and returns the packet if one is received.
