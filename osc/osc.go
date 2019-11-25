@@ -622,9 +622,13 @@ func (s *Server) Handle(addr string, handler HandlerFunc) error {
 	return s.Dispatcher.AddMsgHandler(addr, handler)
 }
 
-// ListenAndServe retrieves incoming OSC packets and dispatches the retrieved
-// OSC packets.
+// ListenAndServe opens a connection, retrieves incoming OSC packets and
+// dispatches the retrieved OSC packets.
+//
+// The connection is closed in the event of an error or interruption.
 func (s *Server) ListenAndServe() error {
+	defer s.CloseConnection()
+
 	if s.Dispatcher == nil {
 		s.Dispatcher = NewOscDispatcher()
 	}
