@@ -633,11 +633,24 @@ func (s *Server) ListenAndServe() error {
 		s.Dispatcher = NewOscDispatcher()
 	}
 
-	ln, err := net.ListenPacket("udp", s.Addr)
-	if err != nil {
-		return err
+	switch s.networkProtocol {
+	case UDP:
+		ln, err := net.ListenPacket("udp", s.Addr)
+		if err != nil {
+			return err
+		}
+
+		return s.Serve(ln)
+	case TCP:
+		l, err := net.Listen("tcp", s.Addr)
+		if err != nil {
+			return err
+		}
+
+		return s.ServeTCP(l)
+	default:
+		return fmt.Errorf("unsupported network protocol: %v", s.networkProtocol)
 	}
-	return s.Serve(ln)
 }
 
 func (s *Server) serve(readPacket func() (Packet, error)) error {
