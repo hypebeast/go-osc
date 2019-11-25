@@ -21,8 +21,8 @@ Features:
 - Support for OSC address pattern including '*', '?', '{,}' and '[]' wildcards
 - TODO: Describe registering methods
 
-This OSC implementation uses the UDP protocol for sending and receiving
-OSC packets.
+This OSC implementation supports using UDP or TCP as the protocol for sending
+and receiving OSC packets. UDP is used by default.
 
 The unit of transmission of OSC is an OSC Packet. Any application that sends
 OSC Packets is an OSC Client; any application that receives OSC Packets is
@@ -59,6 +59,8 @@ Usage
 OSC client example:
 
    client := osc.NewClient("localhost", 8765)
+	 // To use TCP instead of UDP:
+	 // client.SetNetworkProtocol(osc.TCP)
    msg := osc.NewMessage("/osc/address")
    msg.Append(int32(111))
    msg.Append(true)
@@ -68,7 +70,9 @@ OSC client example:
 OSC server example:
 
    addr := "127.0.0.1:8765"
-   server := &osc.Server{Addr: addr}
+   server := osc.Server{Addr: addr}
+	 // To use TCP instead of UDP:
+	 // server.SetNetworkProtocol(osc.TCP)
 
    server.Handle("/message/address", func(msg *osc.Message) {
       osc.PrintMessage(msg)
