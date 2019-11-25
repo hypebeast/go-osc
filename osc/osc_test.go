@@ -257,7 +257,7 @@ func testServerMessageReceiving(
 		select {
 		case <-timeout:
 		case <-start:
-			client := NewClient("localhost", 6677)
+			client := NewClient("localhost", port)
 			client.SetNetworkProtocol(protocol)
 
 			msg := NewMessage("/address/test")
