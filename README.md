@@ -7,6 +7,7 @@
 
 ## Features
 
+* UDP (default) or TCP
 * OSC Bundles, including timetags
 * OSC Messages
 * OSC Client
