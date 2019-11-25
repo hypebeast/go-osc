@@ -3,10 +3,12 @@ package osc
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"math/rand"
 	"net"
 	"reflect"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -113,22 +115,63 @@ func TestHandleWithInvalidAddress(t *testing.T) {
 	}
 }
 
-func TestServerMessageDispatching(t *testing.T) {
+func testServerMessageDispatching(t *testing.T, protocol NetworkProtocol) {
 	finish := make(chan bool)
 	start := make(chan bool)
 	done := sync.WaitGroup{}
 	done.Add(2)
 
+	port := 6677
+	addr := "localhost:" + strconv.Itoa(port)
+
+	var startServer func() error
+	stopServer := func() {}
+	defer stopServer()
+
 	// Start the OSC server in a new go-routine
 	go func() {
-		conn, err := net.ListenPacket("udp", "localhost:6677")
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer conn.Close()
+		server := &Server{Addr: addr}
+		server.SetNetworkProtocol(protocol)
 
-		server := &Server{Addr: "localhost:6677"}
-		err = server.Handle("/address/test", func(msg *Message) {
+		switch protocol {
+		case UDP:
+			startServer = func() error {
+				c, err := net.ListenPacket("udp", addr)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				stopServer = func() { c.Close() }
+
+				// We could ideally just do this:
+				//
+				// return server.Serve(conn)
+				//
+				// ...but closing the connection causes a "use of closed network
+				// connection" error the next time we try to read from the connection.
+				//
+				// Open question: is this desired behavior, or should server.Serve
+				// return successfully in cases where it would otherwise throw this
+				// error?
+				if err := server.Serve(c); err != nil &&
+					!strings.Contains(err.Error(), "use of closed network connection") {
+					return err
+				}
+
+				return nil
+			}
+		case TCP:
+			startServer = func() error {
+				return fmt.Errorf("TODO: implement")
+			}
+		}
+
+		if err := server.Handle("/address/test", func(msg *Message) {
+			defer func() {
+				stopServer()
+				finish <- true
+			}()
+
 			if len(msg.Arguments) != 1 {
 				t.Error("Argument length should be 1 and is: " + string(len(msg.Arguments)))
 			}
@@ -136,17 +179,14 @@ func TestServerMessageDispatching(t *testing.T) {
 			if msg.Arguments[0].(int32) != 1122 {
 				t.Error("Argument should be 1122 and is: " + string(msg.Arguments[0].(int32)))
 			}
-
-			// Stop OSC server
-			conn.Close()
-			finish <- true
-		})
-		if err != nil {
+		}); err != nil {
 			t.Error("Error adding message handler")
 		}
 
 		start <- true
-		server.Serve(conn)
+		if err := startServer(); err != nil {
+			t.Errorf("error during Serve: %s", err.Error())
+		}
 	}()
 
 	go func() {
@@ -155,7 +195,8 @@ func TestServerMessageDispatching(t *testing.T) {
 		case <-timeout:
 		case <-start:
 			time.Sleep(500 * time.Millisecond)
-			client := NewClient("localhost", 6677)
+			client := NewClient("localhost", port)
+			client.SetNetworkProtocol(protocol)
 			msg := NewMessage("/address/test")
 			msg.Append(int32(1122))
 			client.Send(msg)
@@ -171,6 +212,10 @@ func TestServerMessageDispatching(t *testing.T) {
 	}()
 
 	done.Wait()
+}
+
+func TestServerMessageDispatchingUDP(t *testing.T) {
+	testServerMessageDispatching(t, UDP)
 }
 
 func testServerMessageReceiving(
