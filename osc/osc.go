@@ -686,9 +686,13 @@ func (s *Server) ServeTCP(l net.Listener) error {
 func (s *Server) CloseConnection() {
 	switch s.networkProtocol {
 	case UDP:
-		s.udpConnection.Close()
+		if s.udpConnection != nil {
+			s.udpConnection.Close()
+		}
 	case TCP:
-		s.tcpListener.Close()
+		if s.tcpListener != nil {
+			s.tcpListener.Close()
+		}
 	}
 }
 
