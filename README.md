@@ -7,22 +7,22 @@
 
 ## Features
 
-* OSC Bundles, including timetags
-* OSC Messages
-* OSC Client
-* OSC Server
-* Supports the following OSC argument types:
-  * 'i' (Int32)
-  * 'f' (Float32)
-  * 's' (string)
-  * 'b' (blob / binary data)
-  * 'h' (Int64)
-  * 't' (OSC timetag)
-  * 'd' (Double/int64)
-  * 'T' (True)
-  * 'F' (False)
-  * 'N' (Nil)
-* Support for OSC address pattern including '*', '?', '{,}' and '[]' wildcards
+-   OSC Bundles, including timetags
+-   OSC Messages
+-   OSC Client
+-   OSC Server
+-   Supports the following OSC argument types:
+    -   'i' (Int32)
+    -   'f' (Float32)
+    -   's' (string)
+    -   'b' (blob / binary data)
+    -   'h' (Int64)
+    -   't' (OSC timetag)
+    -   'd' (Double/int64)
+    -   'T' (True)
+    -   'F' (False)
+    -   'N' (Nil)
+-   Support for OSC address pattern including '\*', '?', '{,}' and '[]' wildcards
 
 ## Install
 
@@ -55,14 +55,17 @@ package main
 import "github.com/hypebeast/go-osc/osc"
 
 func main() {
-  addr := "127.0.0.1:8765"
-  server := &osc.Server{Addr: addr}
+    addr := "127.0.0.1:8765"
+    d := osc.NewStandardDispatcher()
+    d.AddMsgHandler("/message/address", func(msg *osc.Message) {
+        osc.PrintMessage(msg)
+    })
 
-  server.Handle("/message/address", func(msg *osc.Message) {
-    osc.PrintMessage(msg)
-  })
-
-  server.ListenAndServe()
+    server := &osc.Server{
+        Addr: addr,
+        Dispatcher:d,
+    }
+    server.ListenAndServe()
 }
 ```
 

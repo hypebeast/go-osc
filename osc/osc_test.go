@@ -95,17 +95,17 @@ func TestMessage_String(t *testing.T) {
 	}
 }
 
-func TestHandle(t *testing.T) {
-	server := &Server{Addr: "localhost:6677"}
-	err := server.Handle("/address/test", func(msg *Message) {})
+func TestAddMsgHandler(t *testing.T) {
+	d := NewStandardDispatcher()
+	err := d.AddMsgHandler("/address/test", func(msg *Message) {})
 	if err != nil {
 		t.Error("Expected that OSC address '/address/test' is valid")
 	}
 }
 
-func TestHandleWithInvalidAddress(t *testing.T) {
-	server := &Server{Addr: "localhost:6677"}
-	err := server.Handle("/address*/test", func(msg *Message) {})
+func TestAddMsgHandlerWithInvalidAddress(t *testing.T) {
+	d := NewStandardDispatcher()
+	err := d.AddMsgHandler("/address*/test", func(msg *Message) {})
 	if err == nil {
 		t.Error("Expected error with '/address*/test'")
 	}
@@ -125,8 +125,8 @@ func TestServerMessageDispatching(t *testing.T) {
 		}
 		defer conn.Close()
 
-		server := &Server{Addr: "localhost:6677"}
-		err = server.Handle("/address/test", func(msg *Message) {
+		d := NewStandardDispatcher()
+		err = d.AddMsgHandler("/address/test", func(msg *Message) {
 			if len(msg.Arguments) != 1 {
 				t.Error("Argument length should be 1 and is: " + string(len(msg.Arguments)))
 			}
@@ -143,6 +143,7 @@ func TestServerMessageDispatching(t *testing.T) {
 			t.Error("Error adding message handler")
 		}
 
+		server := &Server{Addr: "localhost:6677", Dispatcher: d}
 		start <- true
 		server.Serve(conn)
 	}()
