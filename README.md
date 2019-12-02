@@ -7,26 +7,26 @@
 
 ## Features
 
--   OSC Bundles, including timetags
--   OSC Messages
--   OSC Client
--   OSC Server
--   Supports the following OSC argument types:
-    -   'i' (Int32)
-    -   'f' (Float32)
-    -   's' (string)
-    -   'b' (blob / binary data)
-    -   'h' (Int64)
-    -   't' (OSC timetag)
-    -   'd' (Double/int64)
-    -   'T' (True)
-    -   'F' (False)
-    -   'N' (Nil)
--   Support for OSC address pattern including '\*', '?', '{,}' and '[]' wildcards
+- OSC Bundles, including timetags
+- OSC Messages
+- OSC Client
+- OSC Server
+- Supports the following OSC argument types:
+  - 'i' (Int32)
+  - 'f' (Float32)
+  - 's' (string)
+  - 'b' (blob / binary data)
+  - 'h' (Int64)
+  - 't' (OSC timetag)
+  - 'd' (Double/int64)
+  - 'T' (True)
+  - 'F' (False)
+  - 'N' (Nil)
+- Support for OSC address pattern including '\*', '?', '{,}' and '[]' wildcards
 
 ## Install
 
-```
+```shell
 go get github.com/hypebeast/go-osc
 ```
 
@@ -71,6 +71,6 @@ func main() {
 
 ## Tests
 
-```
-go test
+```shell
+make test
 ```
