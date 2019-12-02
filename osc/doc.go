@@ -19,7 +19,6 @@ Features:
   'd' (Double/int64), 'T' (True), 'F' (False), 'N' (Nil) types.
 - OSC bundles, including timetags
 - Support for OSC address pattern including '*', '?', '{,}' and '[]' wildcards
-- TODO: Describe registering methods
 
 This OSC implementation uses the UDP protocol for sending and receiving
 OSC packets.
@@ -58,22 +57,25 @@ Usage
 
 OSC client example:
 
-   client := osc.NewClient("localhost", 8765)
-   msg := osc.NewMessage("/osc/address")
-   msg.Append(int32(111))
-   msg.Append(true)
-   msg.Append("hello")
-   client.Send(msg)
+    client := osc.NewClient("localhost", 8765)
+    msg := osc.NewMessage("/osc/address")
+    msg.Append(int32(111))
+    msg.Append(true)
+    msg.Append("hello")
+    client.Send(msg)
 
 OSC server example:
 
-   addr := "127.0.0.1:8765"
-   server := &osc.Server{Addr: addr}
+    addr := "127.0.0.1:8765"
+    d := osc.NewStandardDispatcher()
+    d.AddMsgHandler("/message/address", func(msg *osc.Message) {
+        osc.PrintMessage(msg)
+    })
 
-   server.Handle("/message/address", func(msg *osc.Message) {
-      osc.PrintMessage(msg)
-   })
-
-   server.ListenAndServe()
+    server := &osc.Server{
+        Addr: addr,
+        Dispatcher:d,
+    }
+    server.ListenAndServe()
 */
 package osc
