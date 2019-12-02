@@ -459,6 +459,49 @@ func TestParsePacket(t *testing.T) {
 	}
 }
 
+func TestOscMessageMatch(t *testing.T) {
+	tc := []struct {
+		desc        string
+		addr        string
+		addrPattern string
+		want        bool
+	}{
+		{
+			"match everything",
+			"*",
+			"/a/b",
+			true,
+		},
+		{
+			"don't match",
+			"/a/b",
+			"/a",
+			false,
+		},
+		{
+			"match alternatives",
+			"/a/{foo,bar}",
+			"/a/foo",
+			true,
+		},
+		{
+			"don't match if address is not part of the alternatives",
+			"/a/{foo,bar}",
+			"/a/bob",
+			false,
+		},
+	}
+
+	for _, tt := range tc {
+		msg := NewMessage(tt.addr)
+
+		got := msg.Match(tt.addrPattern)
+		if got != tt.want {
+			t.Errorf("%s: msg.Match('%s') = '%t', want = '%t'", tt.desc, tt.addrPattern, got, tt.want)
+		}
+	}
+}
+
 const zero = string(byte(0))
 
 // nulls returns a string of `i` nulls.
