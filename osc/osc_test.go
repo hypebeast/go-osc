@@ -98,17 +98,17 @@ func TestMessage_String(t *testing.T) {
 	}
 }
 
-func TestHandle(t *testing.T) {
-	server := &Server{Addr: "localhost:6677"}
-	err := server.Handle("/address/test", func(msg *Message) {})
+func TestAddMsgHandler(t *testing.T) {
+	d := NewStandardDispatcher()
+	err := d.AddMsgHandler("/address/test", func(msg *Message) {})
 	if err != nil {
 		t.Error("Expected that OSC address '/address/test' is valid")
 	}
 }
 
-func TestHandleWithInvalidAddress(t *testing.T) {
-	server := &Server{Addr: "localhost:6677"}
-	err := server.Handle("/address*/test", func(msg *Message) {})
+func TestAddMsgHandlerWithInvalidAddress(t *testing.T) {
+	d := NewStandardDispatcher()
+	err := d.AddMsgHandler("/address*/test", func(msg *Message) {})
 	if err == nil {
 		t.Error("Expected error with '/address*/test'")
 	}
@@ -142,37 +142,39 @@ func testServerMessageDispatching(
 	port := 6677
 	addr := "localhost:" + strconv.Itoa(port)
 
-	server := &Server{Addr: addr}
+	server := &Server{Addr: addr, Dispatcher: NewStandardDispatcher()}
 	server.SetNetworkProtocol(protocol)
 	defer server.CloseConnection()
 
-	if err := server.Handle("/address/test", func(msg *Message) {
-		defer func() {
-			server.CloseConnection()
-			finish <- true
-		}()
+	if err := server.Dispatcher.(*StandardDispatcher).AddMsgHandler(
+		"/address/test",
+		func(msg *Message) {
+			defer func() {
+				server.CloseConnection()
+				finish <- true
+			}()
 
-		if len(msg.Arguments) != 2 {
-			t.Error("Argument length should be 2 and is: " + string(len(msg.Arguments)))
-		}
+			if len(msg.Arguments) != 2 {
+				t.Error("Argument length should be 2 and is: " + string(len(msg.Arguments)))
+			}
 
-		if msg.Arguments[0].(int32) != 1122 {
-			t.Error("Argument should be 1122 and is: " + string(msg.Arguments[0].(int32)))
-		}
+			if msg.Arguments[0].(int32) != 1122 {
+				t.Error("Argument should be 1122 and is: " + string(msg.Arguments[0].(int32)))
+			}
 
-		receivedString := msg.Arguments[1].(string)
-		if len(receivedString) != len(stringArgument) {
-			t.Errorf(
-				"String argument length should be %d and is %d",
-				len(stringArgument),
-				len(receivedString),
-			)
-		} else if receivedString != stringArgument {
-			t.Errorf(
-				"Argument should be %s and is: %s", stringArgument, receivedString,
-			)
-		}
-	}); err != nil {
+			receivedString := msg.Arguments[1].(string)
+			if len(receivedString) != len(stringArgument) {
+				t.Errorf(
+					"String argument length should be %d and is %d",
+					len(stringArgument),
+					len(receivedString),
+				)
+			} else if receivedString != stringArgument {
+				t.Errorf(
+					"Argument should be %s and is: %s", stringArgument, receivedString,
+				)
+			}
+		}); err != nil {
 		t.Error("Error adding message handler")
 	}
 
@@ -592,6 +594,49 @@ func TestParsePacket(t *testing.T) {
 		if got, want := pktBytes, ttpktBytes; !reflect.DeepEqual(got, want) {
 			t.Errorf("%s: ParsePacket() as bytes = '%s', want = '%s'", tt.desc, got, want)
 			continue
+		}
+	}
+}
+
+func TestOscMessageMatch(t *testing.T) {
+	tc := []struct {
+		desc        string
+		addr        string
+		addrPattern string
+		want        bool
+	}{
+		{
+			"match everything",
+			"*",
+			"/a/b",
+			true,
+		},
+		{
+			"don't match",
+			"/a/b",
+			"/a",
+			false,
+		},
+		{
+			"match alternatives",
+			"/a/{foo,bar}",
+			"/a/foo",
+			true,
+		},
+		{
+			"don't match if address is not part of the alternatives",
+			"/a/{foo,bar}",
+			"/a/bob",
+			false,
+		},
+	}
+
+	for _, tt := range tc {
+		msg := NewMessage(tt.addr)
+
+		got := msg.Match(tt.addrPattern)
+		if got != tt.want {
+			t.Errorf("%s: msg.Match('%s') = '%t', want = '%t'", tt.desc, tt.addrPattern, got, tt.want)
 		}
 	}
 }

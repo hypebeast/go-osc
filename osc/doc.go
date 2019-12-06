@@ -19,7 +19,6 @@ Features:
   'd' (Double/int64), 'T' (True), 'F' (False), 'N' (Nil) types.
 - OSC bundles, including timetags
 - Support for OSC address pattern including '*', '?', '{,}' and '[]' wildcards
-- TODO: Describe registering methods
 
 This OSC implementation supports using UDP or TCP as the protocol for sending
 and receiving OSC packets. UDP is used by default.
@@ -58,26 +57,31 @@ Usage
 
 OSC client example:
 
-   client := osc.NewClient("localhost", 8765)
-	 // To use TCP instead of UDP:
-	 // client.SetNetworkProtocol(osc.TCP)
-   msg := osc.NewMessage("/osc/address")
-   msg.Append(int32(111))
-   msg.Append(true)
-   msg.Append("hello")
-   client.Send(msg)
+    client := osc.NewClient("localhost", 8765)
+    // To use TCP instead of UDP:
+    // client.SetNetworkProtocol(osc.TCP)
+    msg := osc.NewMessage("/osc/address")
+    msg.Append(int32(111))
+    msg.Append(true)
+    msg.Append("hello")
+    client.Send(msg)
 
 OSC server example:
 
-   addr := "127.0.0.1:8765"
-   server := osc.Server{Addr: addr}
-	 // To use TCP instead of UDP:
-	 // server.SetNetworkProtocol(osc.TCP)
+    addr := "127.0.0.1:8765"
+    d := osc.NewStandardDispatcher()
+    d.AddMsgHandler("/message/address", func(msg *osc.Message) {
+        osc.PrintMessage(msg)
+    })
 
-   server.Handle("/message/address", func(msg *osc.Message) {
-      osc.PrintMessage(msg)
-   })
+    server := &osc.Server{
+        Addr: addr,
+        Dispatcher:d,
+    }
 
-   server.ListenAndServe()
+    // To use TCP instead of UDP:
+    // server.SetNetworkProtocol(osc.TCP)
+
+    server.ListenAndServe()
 */
 package osc
