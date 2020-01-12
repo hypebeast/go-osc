@@ -294,9 +294,9 @@ func (msg *Message) String() string {
 			formatString += " %s"
 			args = append(args, "blob")
 
-		case Timetag:
+		case *Timetag:
 			formatString += " %d"
-			timeTag := arg.(Timetag)
+			timeTag := arg.(*Timetag)
 			args = append(args, timeTag.TimeTag())
 		}
 	}
@@ -1233,7 +1233,7 @@ func getTypeTag(arg interface{}) (string, error) {
 		return "h", nil
 	case float64:
 		return "d", nil
-	case Timetag:
+	case *Timetag:
 		return "t", nil
 	default:
 		return "", fmt.Errorf("Unsupported type: %T", t)
