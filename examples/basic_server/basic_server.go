@@ -34,7 +34,7 @@ func main() {
 			if packet != nil {
 				switch packet.(type) {
 				default:
-					fmt.Println("Unknow packet type!")
+					fmt.Println("Unknown packet type!")
 
 				case *osc.Message:
 					fmt.Printf("-- OSC Message: ")
