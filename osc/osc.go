@@ -537,6 +537,8 @@ func (s *Server) ListenAndServe() error {
 	if err != nil {
 		return err
 	}
+	defer ln.Close()
+
 	return s.Serve(ln)
 }
 
