@@ -13,6 +13,7 @@ import (
 	"net"
 	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -32,6 +33,17 @@ const (
 	// TCP represents the TCP network protocol.
 	TCP
 )
+
+func (protocol NetworkProtocol) String() string {
+	switch protocol {
+	case UDP:
+		return "UDP"
+	case TCP:
+		return "TCP"
+	default:
+		return strconv.Itoa(int(protocol))
+	}
+}
 
 // Packet is the interface for Message and Bundle.
 type Packet interface {
