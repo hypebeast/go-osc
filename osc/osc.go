@@ -835,6 +835,10 @@ func readBundle(reader *bufio.Reader, start *int, end int) (*Bundle, error) {
 		}
 		*start += 4
 
+		if length == 0 {
+			continue
+		}
+
 		p, err := readPacket(reader, start, end)
 		if err != nil {
 			return nil, err
