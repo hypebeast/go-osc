@@ -946,15 +946,14 @@ func readArguments(msg *Message, reader *bufio.Reader, start *int) error {
 			*start += 8
 			msg.Append(NewTimetagFromTimetag(tt))
 
+		case 'N': // nil
+			msg.Append(nil)
+
 		case 'T': // true
 			msg.Append(true)
 
 		case 'F': // false
 			msg.Append(false)
-
-		case 'N': // null
-			msg.Append(nil)
-		}
 	}
 
 	return nil
