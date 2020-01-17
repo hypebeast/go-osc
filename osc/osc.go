@@ -954,6 +954,7 @@ func readArguments(msg *Message, reader *bufio.Reader, start *int) error {
 
 		case 'F': // false
 			msg.Append(false)
+		}
 	}
 
 	return nil
