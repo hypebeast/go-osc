@@ -90,8 +90,7 @@ type Server struct {
 	Dispatcher      Dispatcher
 	ReadTimeout     time.Duration
 	networkProtocol NetworkProtocol
-	udpConnection   net.PacketConn
-	tcpListener     net.Listener
+	close           func() error
 }
 
 // Timetag represents an OSC Time Tag.
@@ -547,7 +546,7 @@ func (c *Client) NetworkProtocol() NetworkProtocol {
 	return c.networkProtocol
 }
 
-// SetNetworkProtocol sets the network protocol.
+// WithProtocol sets the network protocol.
 func (c *Client) SetNetworkProtocol(protocol NetworkProtocol) {
 	c.networkProtocol = protocol
 }
@@ -597,20 +596,26 @@ func (c *Client) Send(packet Packet) error {
 // Server
 ////
 
+type Option func(*Server)
+
 // NewServer creates a new OSC server. The server receives OSC messages and
 // bundles over a network connection.
 //
 // The default network protocol is UDP. To use TCP instead, use
-// server.SetNetworkProtocol(TCP).
+// server.WithProtocol(TCP).
 func NewServer(
 	addr string, dispatcher Dispatcher, readTimeout time.Duration,
+	opts ...Option,
 ) *Server {
-	return &Server{
-		Addr:            addr,
-		Dispatcher:      dispatcher,
-		ReadTimeout:     readTimeout,
-		networkProtocol: UDP,
+	srv := &Server{
+		Addr:        addr,
+		Dispatcher:  dispatcher,
+		ReadTimeout: readTimeout,
 	}
+	for _, opt := range opts {
+		opt(srv)
+	}
+	return srv
 }
 
 // NetworkProtocol returns the network protocol.
@@ -618,9 +623,11 @@ func (s *Server) NetworkProtocol() NetworkProtocol {
 	return s.networkProtocol
 }
 
-// SetNetworkProtocol sets the network protocol.
-func (s *Server) SetNetworkProtocol(protocol NetworkProtocol) {
-	s.networkProtocol = protocol
+// WithProtocol sets the network protocol.
+func WithProtocol(protocol NetworkProtocol) Option {
+	return func(server *Server) {
+		server.networkProtocol = protocol
+	}
 }
 
 // ListenAndServe opens a connection, retrieves incoming OSC packets and
@@ -641,23 +648,25 @@ func (s *Server) ListenAndServe() error {
 			return err
 		}
 
-		return s.Serve(ln)
+		s.close = ln.Close
+		return s.Serve(UDPReceive(ln))
 	case TCP:
 		l, err := net.Listen("tcp", s.Addr)
 		if err != nil {
 			return err
 		}
 
-		return s.ServeTCP(l)
+		s.close = l.Close
+		return s.Serve(TCPReceive(l))
 	default:
 		return fmt.Errorf("unsupported network protocol: %v", s.networkProtocol)
 	}
 }
 
-func (s *Server) serve(readPacket func() (Packet, error)) error {
+func (s *Server) Serve(readPacket ReceiveFunc) error {
 	var tempDelay time.Duration
 	for {
-		msg, err := readPacket()
+		msg, err := readPacket(s.ReadTimeout)
 		if err != nil {
 			if ne, ok := err.(net.Error); ok && ne.Temporary() {
 				if tempDelay == 0 {
@@ -678,47 +687,34 @@ func (s *Server) serve(readPacket func() (Packet, error)) error {
 	}
 }
 
-// Serve retrieves incoming OSC packets from the given connection and dispatches
-// retrieved OSC packets. If something goes wrong an error is returned.
-func (s *Server) Serve(c net.PacketConn) error {
-	s.udpConnection = c
-	return s.serve(func() (Packet, error) { return s.readFromConnection(c) })
-}
-
-// ServeTCP retrieves incoming OSC packets from the given connection and
-// dispatches retrieved OSC packets. If something goes wrong an error is
-// returned.
-func (s *Server) ServeTCP(l net.Listener) error {
-	s.tcpListener = l
-	return s.serve(func() (Packet, error) { return s.ReceiveTCPPacket(l) })
-}
-
 // CloseConnection forcibly closes a server's connection.
 //
 // This causes a "use of closed network connection" error the next time the
 // server attempts to read from the connection.
+// TODO(glynternet): return error here
 func (s *Server) CloseConnection() {
-	switch s.networkProtocol {
-	case UDP:
-		if s.udpConnection != nil {
-			s.udpConnection.Close()
-		}
-	case TCP:
-		if s.tcpListener != nil {
-			s.tcpListener.Close()
-		}
+	if s.close == nil {
+		return
 	}
+	s.close()
 }
 
 // ReceivePacket listens for incoming OSC packets and returns the packet if one is received.
-func (s *Server) ReceivePacket(c net.PacketConn) (Packet, error) {
-	return s.readFromConnection(c)
+func (s *Server) ReceivePacket(read ReceiveFunc) (Packet, error) {
+	return read(s.ReadTimeout)
 }
 
-// readFromConnection retrieves OSC packets.
-func (s *Server) readFromConnection(c net.PacketConn) (Packet, error) {
-	if s.ReadTimeout != 0 {
-		if err := c.SetReadDeadline(time.Now().Add(s.ReadTimeout)); err != nil {
+type ReceiveFunc func(readTimeout time.Duration) (Packet, error)
+
+func UDPReceive(c net.PacketConn) ReceiveFunc {
+	return func(readTimeout time.Duration) (packet Packet, err error) {
+		return receivePacketUDP(readTimeout, c)
+	}
+}
+
+func receivePacketUDP(readTimeout time.Duration, c net.PacketConn) (Packet, error) {
+	if readTimeout != 0 {
+		if err := c.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
 			return nil, err
 		}
 	}
@@ -737,16 +733,22 @@ func (s *Server) readFromConnection(c net.PacketConn) (Packet, error) {
 	return p, nil
 }
 
-// ReceiveTCPPacket listens for incoming OSC packets and returns the packet if
+func TCPReceive(l net.Listener) ReceiveFunc {
+	return func(readTimeout time.Duration) (packet Packet, err error) {
+		return receivePacketTCP(readTimeout, l)
+	}
+}
+
+// receiveTCPPacket listens for incoming OSC packets and returns the packet if
 // one is received.
-func (s *Server) ReceiveTCPPacket(l net.Listener) (Packet, error) {
+func receivePacketTCP(readTimeout time.Duration, l net.Listener) (Packet, error) {
 	conn, err := l.Accept()
 	if err != nil {
 		return nil, err
 	}
 
-	if s.ReadTimeout != 0 {
-		if err := conn.SetReadDeadline(time.Now().Add(s.ReadTimeout)); err != nil {
+	if readTimeout != 0 {
+		if err := conn.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
 			return nil, err
 		}
 	}

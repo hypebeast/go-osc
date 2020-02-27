@@ -142,8 +142,7 @@ func testServerMessageDispatching(
 	port := 6677
 	addr := "localhost:" + strconv.Itoa(port)
 
-	server := &Server{Addr: addr, Dispatcher: NewStandardDispatcher()}
-	server.SetNetworkProtocol(protocol)
+	server := NewServer(addr, NewStandardDispatcher(), 0, WithProtocol(protocol))
 	defer server.CloseConnection()
 
 	if err := server.Dispatcher.(*StandardDispatcher).AddMsgHandler(
@@ -250,7 +249,6 @@ func testServerMessageReceiving(
 	// Start the server in a go-routine
 	go func() {
 		server := &Server{}
-		server.SetNetworkProtocol(protocol)
 
 		var receivePacket func() (Packet, error)
 		switch protocol {
@@ -262,7 +260,7 @@ func testServerMessageReceiving(
 				}
 				defer c.Close()
 
-				return server.ReceivePacket(c)
+				return server.ReceivePacket(UDPReceive(c))
 			}
 		case TCP:
 			receivePacket = func() (Packet, error) {
@@ -272,7 +270,7 @@ func testServerMessageReceiving(
 				}
 				defer l.Close()
 
-				return server.ReceiveTCPPacket(l)
+				return server.ReceivePacket(TCPReceive(l))
 			}
 		}
 
@@ -417,7 +415,7 @@ func TestReadTimeout(t *testing.T) {
 		defer c.Close()
 
 		start <- true
-		p, err := server.ReceivePacket(c)
+		p, err := server.ReceivePacket(UDPReceive(c))
 		if err != nil {
 			t.Errorf("server error: %v", err)
 			return
@@ -428,13 +426,13 @@ func TestReadTimeout(t *testing.T) {
 		}
 
 		// Second receive should time out since client is delayed 150 milliseconds
-		if _, err = server.ReceivePacket(c); err == nil {
+		if _, err = server.ReceivePacket(UDPReceive(c)); err == nil {
 			t.Errorf("expected error")
 			return
 		}
 
 		// Next receive should get it
-		p, err = server.ReceivePacket(c)
+		p, err = server.ReceivePacket(UDPReceive(c))
 		if err != nil {
 			t.Errorf("server error: %v", err)
 			return
