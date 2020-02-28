@@ -596,7 +596,8 @@ func (c *Client) Send(packet Packet) error {
 // Server
 ////
 
-type Option func(*Server)
+// ServerOption is a function that customizes a Server instance.
+type ServerOption func(*Server)
 
 // NewServer creates a new OSC server. The server receives OSC messages and
 // bundles over a network connection.
@@ -605,7 +606,7 @@ type Option func(*Server)
 // server.WithProtocol(TCP).
 func NewServer(
 	addr string, dispatcher Dispatcher, readTimeout time.Duration,
-	opts ...Option,
+	opts ...ServerOption,
 ) *Server {
 	srv := &Server{
 		Addr:        addr,
@@ -624,7 +625,7 @@ func (s *Server) NetworkProtocol() NetworkProtocol {
 }
 
 // WithProtocol sets the network protocol.
-func WithProtocol(protocol NetworkProtocol) Option {
+func WithProtocol(protocol NetworkProtocol) ServerOption {
 	return func(server *Server) {
 		server.networkProtocol = protocol
 	}
