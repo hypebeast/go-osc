@@ -691,12 +691,12 @@ func (s *Server) Serve(readPacket ReceiveFunc) error {
 //
 // This causes a "use of closed network connection" error the next time the
 // server attempts to read from the connection.
-// TODO(glynternet): return error here
-func (s *Server) CloseConnection() {
+func (s *Server) CloseConnection() error {
 	if s.close == nil {
-		return
+		return nil
 	}
-	s.close()
+
+	return s.close()
 }
 
 // ReceivePacket listens for incoming OSC packets and returns the packet if one is received.
