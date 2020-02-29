@@ -664,6 +664,10 @@ func (s *Server) ListenAndServe() error {
 	}
 }
 
+// Serve uses the provided ReceiveFunc to retrieve and dispatch incoming OSC
+// packets in a loop.
+//
+// Returns an error if something goes awry.
 func (s *Server) Serve(readPacket ReceiveFunc) error {
 	var tempDelay time.Duration
 	for {
