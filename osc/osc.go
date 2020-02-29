@@ -705,67 +705,63 @@ func (s *Server) ReceivePacket(read ReceiveFunc) (Packet, error) {
 	return read(s.ReadTimeout)
 }
 
+// ReceiveFunc is a function that listens for incoming OSC packets and returns
+// either the first packet received, or an error if something went awry.
 type ReceiveFunc func(readTimeout time.Duration) (Packet, error)
 
+// UDPReceive returns a ReceiveFunc that uses the provided net.PacketConn to
+// receive a packet over UDP.
 func UDPReceive(c net.PacketConn) ReceiveFunc {
 	return func(readTimeout time.Duration) (packet Packet, err error) {
-		return receivePacketUDP(readTimeout, c)
-	}
-}
+		if readTimeout != 0 {
+			if err := c.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
+				return nil, err
+			}
+		}
 
-func receivePacketUDP(readTimeout time.Duration, c net.PacketConn) (Packet, error) {
-	if readTimeout != 0 {
-		if err := c.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
+		data := make([]byte, 65535)
+		n, _, err := c.ReadFrom(data)
+		if err != nil {
 			return nil, err
 		}
-	}
 
-	data := make([]byte, 65535)
-	n, _, err := c.ReadFrom(data)
-	if err != nil {
-		return nil, err
+		var start int
+		p, err := readPacket(bufio.NewReader(bytes.NewBuffer(data)), &start, n)
+		if err != nil {
+			return nil, err
+		}
+		return p, nil
 	}
-
-	var start int
-	p, err := readPacket(bufio.NewReader(bytes.NewBuffer(data)), &start, n)
-	if err != nil {
-		return nil, err
-	}
-	return p, nil
 }
 
+// TCPReceive returns a ReceiveFunc that uses the provided net.Listener to
+// receive a packet over TCP.
 func TCPReceive(l net.Listener) ReceiveFunc {
 	return func(readTimeout time.Duration) (packet Packet, err error) {
-		return receivePacketTCP(readTimeout, l)
-	}
-}
-
-// receiveTCPPacket listens for incoming OSC packets and returns the packet if
-// one is received.
-func receivePacketTCP(readTimeout time.Duration, l net.Listener) (Packet, error) {
-	conn, err := l.Accept()
-	if err != nil {
-		return nil, err
-	}
-
-	if readTimeout != 0 {
-		if err := conn.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
+		conn, err := l.Accept()
+		if err != nil {
 			return nil, err
 		}
-	}
 
-	data, err := ioutil.ReadAll(conn)
-	if err != nil {
-		return nil, err
-	}
+		if readTimeout != 0 {
+			if err := conn.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
+				return nil, err
+			}
+		}
 
-	var start int
-	end := len(data)
-	p, err := readPacket(bufio.NewReader(bytes.NewBuffer(data)), &start, end)
-	if err != nil {
-		return nil, err
+		data, err := ioutil.ReadAll(conn)
+		if err != nil {
+			return nil, err
+		}
+
+		var start int
+		end := len(data)
+		p, err := readPacket(bufio.NewReader(bytes.NewBuffer(data)), &start, end)
+		if err != nil {
+			return nil, err
+		}
+		return p, nil
 	}
-	return p, nil
 }
 
 // ParsePacket parses the given msg string and returns a Packet
