@@ -80,7 +80,7 @@ OSC server example:
     }
 
     // To use TCP instead of UDP:
-    // server.WithProtocol(osc.TCP)
+    // osc.WithProtocol(osc.TCP)
     server.ListenAndServe()
 */
 package osc
