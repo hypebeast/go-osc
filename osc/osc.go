@@ -603,7 +603,7 @@ type ServerOption func(*Server)
 // bundles over a network connection.
 //
 // The default network protocol is UDP. To use TCP instead, use the ServerOption
-// osc.ServerProtocol(TCP).
+// ServerProtocol(TCP).
 func NewServer(
 	addr string, dispatcher Dispatcher, readTimeout time.Duration,
 	opts ...ServerOption,
