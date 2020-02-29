@@ -195,8 +195,7 @@ func testServerMessageDispatching(
 		case <-timeout:
 		case <-start:
 			time.Sleep(500 * time.Millisecond)
-			client := NewClient("localhost", port)
-			client.SetNetworkProtocol(protocol)
+			client := NewClient("localhost", port, ClientProtocol(protocol))
 			msg := NewMessage("/address/test")
 			msg.Append(int32(1122))
 			msg.Append(stringArgument)
@@ -321,8 +320,7 @@ func testServerMessageReceiving(
 		select {
 		case <-timeout:
 		case <-start:
-			client := NewClient("localhost", port)
-			client.SetNetworkProtocol(protocol)
+			client := NewClient("localhost", port, ClientProtocol(protocol))
 
 			msg := NewMessage("/address/test")
 			msg.Append(int32(1122))
@@ -548,8 +546,9 @@ func TestClientSetLocalAddr(t *testing.T) {
 		t.Error(err.Error())
 	}
 	expectedAddr := "127.0.0.1:41789"
-	if client.laddr.String() != expectedAddr {
-		t.Errorf("Expected laddr to be %s but was %s", expectedAddr, client.laddr.String())
+	actualAddr := client.LocalAddrString()
+	if actualAddr != expectedAddr {
+		t.Errorf("Expected laddr to be %s but was %s", expectedAddr, actualAddr)
 	}
 }
 

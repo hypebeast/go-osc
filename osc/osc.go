@@ -78,9 +78,9 @@ var _ Packet = (*Bundle)(nil)
 type Client struct {
 	ip              string
 	port            int
-	laddr           *net.UDPAddr
-	laddrTCP        *net.TCPAddr
 	networkProtocol NetworkProtocol
+	sendBytes       SendFunc
+	localAddrString string
 }
 
 // Server represents an OSC server. The server listens on Address and Port for
@@ -497,16 +497,35 @@ func (b *Bundle) MarshalBinary() ([]byte, error) {
 // Client
 ////
 
+// ClientOption is a function that customizes a Client instance.
+type ClientOption func(*Client)
+
 // NewClient creates a new OSC client. The Client is used to send OSC
 // messages and OSC bundles over a network connection.
 //
-// The default network protocol is UDP. To use TCP instead, use
-// client.SetNetworkProtocol(TCP).
+// The default network protocol is UDP. To use TCP instead, use the ClientOption
+// ClientProtocol(TCP).
 //
 // The `ip` argument specifies the IP address and `port` defines the target port
 // where the messages and bundles will be send to.
-func NewClient(ip string, port int) *Client {
-	return &Client{ip: ip, port: port, laddr: nil, networkProtocol: UDP}
+func NewClient(ip string, port int, opts ...ClientOption) *Client {
+	client := &Client{ip: ip, port: port, networkProtocol: UDP}
+
+	for _, opt := range opts {
+		opt(client)
+	}
+
+	if client.sendBytes == nil {
+		switch client.networkProtocol {
+		case UDP:
+			client.sendBytes = client.UDPSend(nil)
+
+		case TCP:
+			client.sendBytes = client.TCPSend(nil)
+		}
+	}
+
+	return client
 }
 
 // IP returns the IP address.
@@ -529,16 +548,28 @@ func (c *Client) SetLocalAddr(ip string, port int) error {
 		if err != nil {
 			return err
 		}
-		c.laddr = laddr
+		c.sendBytes = c.UDPSend(laddr)
+		c.localAddrString = laddr.String()
 	case TCP:
-		laddrTCP, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", ip, port))
+		laddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", ip, port))
 		if err != nil {
 			return err
 		}
-		c.laddrTCP = laddrTCP
+		c.sendBytes = c.TCPSend(laddr)
+		c.localAddrString = laddr.String()
 	}
 
 	return nil
+}
+
+// LocalAddrString returns a string representation of the local address, or
+// "unspecified" if unspecified.
+func (c *Client) LocalAddrString() string {
+	if c.localAddrString == "" {
+		return "unspecified"
+	}
+
+	return c.localAddrString
 }
 
 // NetworkProtocol returns the network protocol.
@@ -546,9 +577,11 @@ func (c *Client) NetworkProtocol() NetworkProtocol {
 	return c.networkProtocol
 }
 
-// WithProtocol sets the network protocol.
-func (c *Client) SetNetworkProtocol(protocol NetworkProtocol) {
-	c.networkProtocol = protocol
+// ClientProtocol sets the network protocol.
+func ClientProtocol(protocol NetworkProtocol) ClientOption {
+	return func(client *Client) {
+		client.networkProtocol = protocol
+	}
 }
 
 // Send sends an OSC Bundle or an OSC Message.
@@ -558,38 +591,56 @@ func (c *Client) Send(packet Packet) error {
 		return err
 	}
 
-	switch c.networkProtocol {
-	case UDP:
+	return c.sendBytes(data)
+}
+
+// SendFunc is a function that sends bytes somewhere and returns an error if
+// something goes awry.
+type SendFunc func([]byte) error
+
+// UDPSend returns a SendFunc that sends bytes over UDP from the specified local
+// address. If laddr is nil, a local address is automatically chosen.
+func (c *Client) UDPSend(laddr *net.UDPAddr) SendFunc {
+	return func(data []byte) error {
 		addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", c.ip, c.port))
 		if err != nil {
 			return err
 		}
-		conn, err := net.DialUDP("udp", c.laddr, addr)
+
+		conn, err := net.DialUDP("udp", laddr, addr)
 		if err != nil {
 			return err
 		}
 		defer conn.Close()
 
-		if _, err = conn.Write(data); err != nil {
+		if _, err := conn.Write(data); err != nil {
 			return err
 		}
-	case TCP:
+
+		return nil
+	}
+}
+
+// TCPSend returns a SendFunc that sends bytes over TCP from the specified local
+// address. If laddr is nil, a local address is automatically chosen.
+func (c *Client) TCPSend(laddr *net.TCPAddr) SendFunc {
+	return func(data []byte) error {
 		addr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", c.ip, c.port))
 		if err != nil {
 			return err
 		}
-		conn, err := net.DialTCP("tcp", c.laddrTCP, addr)
+		conn, err := net.DialTCP("tcp", laddr, addr)
 		if err != nil {
 			return err
 		}
 		defer conn.Close()
 
-		if _, err = conn.Write(data); err != nil {
+		if _, err := conn.Write(data); err != nil {
 			return err
 		}
-	}
 
-	return nil
+		return nil
+	}
 }
 
 ////

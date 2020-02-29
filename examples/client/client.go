@@ -106,8 +106,7 @@ func main() {
 	}
 
 	ip := "localhost"
-	client := osc.NewClient(ip, int(port))
-	client.SetNetworkProtocol(protocol)
+	client := osc.NewClient(ip, int(port), osc.ClientProtocol(protocol))
 
 	fmt.Println("### Welcome to go-osc transmitter demo")
 	fmt.Println("Please, select the OSC packet type you would like to send:")

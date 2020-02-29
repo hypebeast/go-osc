@@ -59,7 +59,7 @@ OSC client example:
 
     client := osc.NewClient("localhost", 8765)
     // To use TCP instead of UDP:
-    // client.SetNetworkProtocol(osc.TCP)
+    // client := osc.NewClient("localhost", 8765, osc.ClientProtocol(osc.TCP))
     msg := osc.NewMessage("/osc/address")
     msg.Append(int32(111))
     msg.Append(true)
