@@ -142,7 +142,9 @@ func testServerMessageDispatching(
 	port := 6677
 	addr := "localhost:" + strconv.Itoa(port)
 
-	server := NewServer(addr, NewStandardDispatcher(), 0, WithProtocol(protocol))
+	server := NewServer(
+		addr, NewStandardDispatcher(), 0, ServerProtocol(protocol),
+	)
 	defer server.CloseConnection()
 
 	if err := server.Dispatcher.(*StandardDispatcher).AddMsgHandler(

@@ -103,7 +103,7 @@ func main() {
 
 	server := osc.NewServer(addr, Debugger{}, 0,
 		// defaults to UDP if not used
-		osc.WithProtocol(protocol))
+		osc.ServerProtocol(protocol))
 
 	fmt.Println("### Welcome to go-osc receiver demo")
 	fmt.Printf("Listening via %s on port %d...\n", protocol, port)

@@ -55,8 +55,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	server := osc.NewServer(addr, d, 0,
-		osc.WithProtocol(protocol))
+	server := osc.NewServer(addr, d, 0, osc.ServerProtocol(protocol))
 
 	fmt.Printf("Listening via %s on port %d...\n", protocol, port)
 

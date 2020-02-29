@@ -74,13 +74,10 @@ OSC server example:
         osc.PrintMessage(msg)
     })
 
-    server := &osc.Server{
-        Addr: addr,
-        Dispatcher:d,
-    }
-
+		server := osc.NewServer(addr, d, 0)
     // To use TCP instead of UDP:
-    // osc.WithProtocol(osc.TCP)
+    // server := osc.NewServer(addr, d, 0, osc.ServerProtocol(osc.TCP))
+
     server.ListenAndServe()
 */
 package osc

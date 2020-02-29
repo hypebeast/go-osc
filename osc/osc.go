@@ -602,8 +602,8 @@ type ServerOption func(*Server)
 // NewServer creates a new OSC server. The server receives OSC messages and
 // bundles over a network connection.
 //
-// The default network protocol is UDP. To use TCP instead, use
-// osc.WithProtocol(TCP).
+// The default network protocol is UDP. To use TCP instead, use the ServerOption
+// osc.ServerProtocol(TCP).
 func NewServer(
 	addr string, dispatcher Dispatcher, readTimeout time.Duration,
 	opts ...ServerOption,
@@ -624,8 +624,8 @@ func (s *Server) NetworkProtocol() NetworkProtocol {
 	return s.networkProtocol
 }
 
-// WithProtocol sets the network protocol.
-func WithProtocol(protocol NetworkProtocol) ServerOption {
+// ServerProtocol sets the network protocol.
+func ServerProtocol(protocol NetworkProtocol) ServerOption {
 	return func(server *Server) {
 		server.networkProtocol = protocol
 	}
