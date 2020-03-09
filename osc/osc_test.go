@@ -131,7 +131,9 @@ func serveUntilInterrupted(server *Server) error {
 	return nil
 }
 
-func testServerMessageDispatching(t *testing.T, stringArgument string) {
+func testServerMessageDispatching(
+	t *testing.T, protocol NetworkProtocol, stringArgument string,
+) {
 	finish := make(chan bool)
 	start := make(chan bool)
 	done := sync.WaitGroup{}
@@ -140,7 +142,9 @@ func testServerMessageDispatching(t *testing.T, stringArgument string) {
 	port := 6677
 	addr := "localhost:" + strconv.Itoa(port)
 
-	server := &Server{Addr: addr, Dispatcher: NewStandardDispatcher()}
+	server := NewServer(
+		addr, NewStandardDispatcher(), 0, ServerProtocol(protocol),
+	)
 	defer server.CloseConnection()
 
 	if err := server.Dispatcher.(*StandardDispatcher).AddMsgHandler(
@@ -160,7 +164,6 @@ func testServerMessageDispatching(t *testing.T, stringArgument string) {
 			}
 
 			receivedString := msg.Arguments[1].(string)
-
 			if len(receivedString) != len(stringArgument) {
 				t.Errorf(
 					"String argument length should be %d and is %d",
@@ -193,7 +196,7 @@ func testServerMessageDispatching(t *testing.T, stringArgument string) {
 		case <-timeout:
 		case <-start:
 			time.Sleep(500 * time.Millisecond)
-			client := NewClient("localhost", port)
+			client := NewClient("localhost", port, ClientProtocol(protocol))
 			msg := NewMessage("/address/test")
 			msg.Append(int32(1122))
 			msg.Append(stringArgument)
@@ -228,10 +231,16 @@ func TestServerMessageDispatchingUDP(t *testing.T) {
 	//
 	// Reference:
 	// https://forum.juce.com/t/osc-blobs-are-lost-above-certain-size/20241/2
-	testServerMessageDispatching(t, randomString(500))
+	testServerMessageDispatching(t, UDP, randomString(500))
 }
 
-func testServerMessageReceiving(t *testing.T, stringArgument string) {
+func TestServerMessageDispatchingTCP(t *testing.T) {
+	testServerMessageDispatching(t, TCP, randomString(1000000))
+}
+
+func testServerMessageReceiving(
+	t *testing.T, protocol NetworkProtocol, stringArgument string,
+) {
 	port := 6677
 
 	finish := make(chan bool)
@@ -243,18 +252,36 @@ func testServerMessageReceiving(t *testing.T, stringArgument string) {
 	go func() {
 		server := &Server{}
 
-		c, err := net.ListenPacket("udp", "localhost:"+strconv.Itoa(port))
-		if err != nil {
-			t.Fatal(err)
+		var receivePacket func() (Packet, error)
+		switch protocol {
+		case UDP:
+			receivePacket = func() (Packet, error) {
+				c, err := net.ListenPacket("udp", "localhost:"+strconv.Itoa(port))
+				if err != nil {
+					return nil, err
+				}
+				defer c.Close()
+
+				return server.ReceivePacket(UDPReceive(c))
+			}
+		case TCP:
+			receivePacket = func() (Packet, error) {
+				l, err := net.Listen("tcp", ":"+strconv.Itoa(port))
+				if err != nil {
+					return nil, err
+				}
+				defer l.Close()
+
+				return server.ReceivePacket(TCPReceive(l))
+			}
 		}
-		defer c.Close()
 
 		// Start the client
 		start <- true
 
-		packet, err := server.ReceivePacket(c)
+		packet, err := receivePacket()
 		if err != nil {
-			t.Error("Server error")
+			t.Errorf("Server error: %s", err.Error())
 			return
 		}
 		if packet == nil {
@@ -286,7 +313,6 @@ func testServerMessageReceiving(t *testing.T, stringArgument string) {
 			)
 		}
 
-		c.Close()
 		finish <- true
 	}()
 
@@ -295,7 +321,8 @@ func testServerMessageReceiving(t *testing.T, stringArgument string) {
 		select {
 		case <-timeout:
 		case <-start:
-			client := NewClient("localhost", port)
+			client := NewClient("localhost", port, ClientProtocol(protocol))
+
 			msg := NewMessage("/address/test")
 			msg.Append(int32(1122))
 			msg.Append(int32(3344))
@@ -344,7 +371,11 @@ func TestServerMessageReceivingUDP(t *testing.T) {
 	//
 	// Reference:
 	// https://forum.juce.com/t/osc-blobs-are-lost-above-certain-size/20241/2
-	testServerMessageReceiving(t, randomString(500))
+	testServerMessageReceiving(t, UDP, randomString(500))
+}
+
+func TestServerMessageReceivingTCP(t *testing.T) {
+	testServerMessageReceiving(t, TCP, randomString(1000000))
 }
 
 func TestReadTimeout(t *testing.T) {
@@ -385,7 +416,7 @@ func TestReadTimeout(t *testing.T) {
 		defer c.Close()
 
 		start <- true
-		p, err := server.ReceivePacket(c)
+		p, err := server.ReceivePacket(UDPReceive(c))
 		if err != nil {
 			t.Errorf("server error: %v", err)
 			return
@@ -396,13 +427,13 @@ func TestReadTimeout(t *testing.T) {
 		}
 
 		// Second receive should time out since client is delayed 150 milliseconds
-		if _, err = server.ReceivePacket(c); err == nil {
+		if _, err = server.ReceivePacket(UDPReceive(c)); err == nil {
 			t.Errorf("expected error")
 			return
 		}
 
 		// Next receive should get it
-		p, err = server.ReceivePacket(c)
+		p, err = server.ReceivePacket(UDPReceive(c))
 		if err != nil {
 			t.Errorf("server error: %v", err)
 			return
@@ -516,8 +547,9 @@ func TestClientSetLocalAddr(t *testing.T) {
 		t.Error(err.Error())
 	}
 	expectedAddr := "127.0.0.1:41789"
-	if client.laddr.String() != expectedAddr {
-		t.Errorf("Expected laddr to be %s but was %s", expectedAddr, client.laddr.String())
+	actualAddr := client.LocalAddrString()
+	if actualAddr != expectedAddr {
+		t.Errorf("Expected laddr to be %s but was %s", expectedAddr, actualAddr)
 	}
 }
 

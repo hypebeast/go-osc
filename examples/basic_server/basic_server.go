@@ -67,7 +67,7 @@ func (Debugger) Dispatch(packet osc.Packet) {
 }
 
 func printUsage() {
-	fmt.Printf("Usage: %s PORT\n", os.Args[0])
+	fmt.Printf("Usage: %s PROTOCOL PORT\n", os.Args[0])
 }
 
 func main() {
@@ -80,7 +80,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	port, err := strconv.ParseInt(os.Args[1], 10, 32)
+	var protocol osc.NetworkProtocol
+	switch strings.ToLower(os.Args[1]) {
+	case "udp":
+		protocol = osc.UDP
+	case "tcp":
+		protocol = osc.TCP
+	default:
+		fmt.Println("Invalid protocol: " + os.Args[1])
+		printUsage()
+		os.Exit(1)
+	}
+
+	port, err := strconv.ParseInt(os.Args[2], 10, 32)
 	if err != nil {
 		fmt.Println(err)
 		printUsage()
@@ -89,10 +101,12 @@ func main() {
 
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 
-	server := &osc.Server{Addr: addr, Dispatcher: Debugger{}}
+	server := osc.NewServer(addr, Debugger{}, 0,
+		// defaults to UDP if not used
+		osc.ServerProtocol(protocol))
 
 	fmt.Println("### Welcome to go-osc receiver demo")
-	fmt.Printf("Listening via UDP on port %d...\n", port)
+	fmt.Printf("Listening via %s on port %d...\n", protocol, port)
 
 	if err := server.ListenAndServe(); err != nil {
 		fmt.Println(err)
