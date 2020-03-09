@@ -63,6 +63,7 @@ type Server struct {
 	Addr        string
 	Dispatcher  Dispatcher
 	ReadTimeout time.Duration
+	close       func() error
 }
 
 // Timetag represents an OSC Time Tag.
@@ -529,6 +530,8 @@ func (c *Client) Send(packet Packet) error {
 // ListenAndServe retrieves incoming OSC packets and dispatches the retrieved
 // OSC packets.
 func (s *Server) ListenAndServe() error {
+	defer s.CloseConnection()
+
 	if s.Dispatcher == nil {
 		s.Dispatcher = NewStandardDispatcher()
 	}
@@ -537,7 +540,8 @@ func (s *Server) ListenAndServe() error {
 	if err != nil {
 		return err
 	}
-	defer ln.Close()
+
+	s.close = ln.Close
 
 	return s.Serve(ln)
 }
@@ -566,6 +570,18 @@ func (s *Server) Serve(c net.PacketConn) error {
 		tempDelay = 0
 		go s.Dispatcher.Dispatch(msg)
 	}
+}
+
+// CloseConnection forcibly closes a server's connection.
+//
+// This causes a "use of closed network connection" error the next time the
+// server attempts to read from the connection.
+func (s *Server) CloseConnection() error {
+	if s.close == nil {
+		return nil
+	}
+
+	return s.close()
 }
 
 // ReceivePacket listens for incoming OSC packets and returns the packet if one is received.
