@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"net"
 	"reflect"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -111,22 +113,43 @@ func TestAddMsgHandlerWithInvalidAddress(t *testing.T) {
 	}
 }
 
+// These tests stop the server by forcibly closing the connection, which causes
+// a "use of closed network connection" error the next time we try to read from
+// the connection. As a workaround, this wraps server.ListenAndServe() in an
+// error-handling layer that doesn't consider "use of closed network connection"
+// an error.
+//
+// Open question: is this desired behavior, or should server.serve return
+// successfully in cases where it would otherwise throw this error?
+func serveUntilInterrupted(server *Server) error {
+	if err := server.ListenAndServe(); err != nil &&
+		!strings.Contains(err.Error(), "use of closed network connection") {
+		return err
+	}
+
+	return nil
+}
+
 func TestServerMessageDispatching(t *testing.T) {
 	finish := make(chan bool)
 	start := make(chan bool)
 	done := sync.WaitGroup{}
 	done.Add(2)
 
-	// Start the OSC server in a new go-routine
-	go func() {
-		conn, err := net.ListenPacket("udp", "localhost:6677")
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer conn.Close()
+	port := 6677
+	addr := "localhost:" + strconv.Itoa(port)
 
-		d := NewStandardDispatcher()
-		err = d.AddMsgHandler("/address/test", func(msg *Message) {
+	server := &Server{Addr: addr, Dispatcher: NewStandardDispatcher()}
+	defer server.CloseConnection()
+
+	if err := server.Dispatcher.(*StandardDispatcher).AddMsgHandler(
+		"/address/test",
+		func(msg *Message) {
+			defer func() {
+				server.CloseConnection()
+				finish <- true
+			}()
+
 			if len(msg.Arguments) != 1 {
 				t.Error("Argument length should be 1 and is: " + string(len(msg.Arguments)))
 			}
@@ -134,30 +157,36 @@ func TestServerMessageDispatching(t *testing.T) {
 			if msg.Arguments[0].(int32) != 1122 {
 				t.Error("Argument should be 1122 and is: " + string(msg.Arguments[0].(int32)))
 			}
+		},
+	); err != nil {
+		t.Error("Error adding message handler")
+	}
 
-			// Stop OSC server
-			conn.Close()
-			finish <- true
-		})
-		if err != nil {
-			t.Error("Error adding message handler")
-		}
-
-		server := &Server{Addr: "localhost:6677", Dispatcher: d}
+	// Server goroutine
+	go func() {
 		start <- true
-		server.Serve(conn)
+
+		if err := serveUntilInterrupted(server); err != nil {
+			t.Errorf("error during Serve: %s", err.Error())
+		}
 	}()
 
+	// Client goroutine
 	go func() {
 		timeout := time.After(5 * time.Second)
 		select {
 		case <-timeout:
 		case <-start:
 			time.Sleep(500 * time.Millisecond)
-			client := NewClient("localhost", 6677)
+			client := NewClient("localhost", port)
 			msg := NewMessage("/address/test")
 			msg.Append(int32(1122))
-			client.Send(msg)
+			if err := client.Send(msg); err != nil {
+				t.Error(err)
+				done.Done()
+				done.Done()
+				return
+			}
 		}
 
 		done.Done()
@@ -173,6 +202,8 @@ func TestServerMessageDispatching(t *testing.T) {
 }
 
 func TestServerMessageReceiving(t *testing.T) {
+	port := 6677
+
 	finish := make(chan bool)
 	start := make(chan bool)
 	done := sync.WaitGroup{}
@@ -181,7 +212,8 @@ func TestServerMessageReceiving(t *testing.T) {
 	// Start the server in a go-routine
 	go func() {
 		server := &Server{}
-		c, err := net.ListenPacket("udp", "localhost:6677")
+
+		c, err := net.ListenPacket("udp", "localhost:"+strconv.Itoa(port))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -220,12 +252,17 @@ func TestServerMessageReceiving(t *testing.T) {
 		select {
 		case <-timeout:
 		case <-start:
-			client := NewClient("localhost", 6677)
+			client := NewClient("localhost", port)
 			msg := NewMessage("/address/test")
 			msg.Append(int32(1122))
 			msg.Append(int32(3344))
 			time.Sleep(500 * time.Millisecond)
-			client.Send(msg)
+			if err := client.Send(msg); err != nil {
+				t.Error(err)
+				done.Done()
+				done.Done()
+				return
+			}
 		}
 
 		done.Done()
