@@ -4,18 +4,97 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"math/rand"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/hypebeast/go-osc/osc"
 )
 
-// TODO: Revise the client!
+func testString() string {
+	return "test string " + strconv.Itoa(rand.Intn(1000))
+}
+
+func testBlob() []byte {
+	return []byte(testString())
+}
+
+var argFunctions = []func(*osc.Message){
+	func(msg *osc.Message) {
+		msg.Append(int32(rand.Intn(100000)))
+	},
+	func(msg *osc.Message) {
+		msg.Append(rand.Float32() * 100000)
+	},
+	func(msg *osc.Message) {
+		msg.Append(testString())
+	},
+	func(msg *osc.Message) {
+		msg.Append(testBlob())
+	},
+	func(msg *osc.Message) {
+		msg.Append(*osc.NewTimetag(time.Now()))
+	},
+	func(msg *osc.Message) {
+		msg.Append(true)
+	},
+	func(msg *osc.Message) {
+		msg.Append(false)
+	},
+	func(msg *osc.Message) {
+		msg.Append(nil)
+	},
+}
+
+func randomMessage(address string) *osc.Message {
+	message := osc.NewMessage(address)
+
+	for i := 0; i < 1+rand.Intn(5); i++ {
+		argFunctions[rand.Intn(len(argFunctions))](message)
+	}
+
+	return message
+}
+
+func randomBundle() *osc.Bundle {
+	bundle := osc.NewBundle(time.Now())
+
+	for i := 0; i < 1+rand.Intn(5); i++ {
+		if rand.Float32() < 0.25 {
+			bundle.Append(randomBundle())
+		} else {
+			bundle.Append(randomMessage("/bundle/message/" + strconv.Itoa(i+1)))
+		}
+	}
+
+	return bundle
+}
+
+func printUsage() {
+	fmt.Printf("Usage: %s PORT\n", os.Args[0])
+}
+
 func main() {
+	rand.Seed(time.Now().Unix())
+
+	numArgs := len(os.Args[1:])
+
+	if numArgs != 2 {
+		printUsage()
+		os.Exit(1)
+	}
+
+	port, err := strconv.ParseInt(os.Args[1], 10, 32)
+	if err != nil {
+		fmt.Println(err)
+		printUsage()
+		os.Exit(1)
+	}
+
 	ip := "localhost"
-	port := 8765
-	client := osc.NewClient(ip, port)
+	client := osc.NewClient(ip, int(port))
 
 	fmt.Println("### Welcome to go-osc transmitter demo")
 	fmt.Println("Please, select the OSC packet type you would like to send:")
@@ -38,28 +117,13 @@ func main() {
 
 		sline := strings.TrimRight(string(line), "\n")
 		if sline == "m" {
-			message := osc.NewMessage("/message/address")
-			message.Append(int32(12345))
-			message.Append("teststring")
-			message.Append(true)
-			message.Append(false)
-			client.Send(message)
+			if err := client.Send(randomMessage("/message/address")); err != nil {
+				fmt.Println(err)
+			}
 		} else if sline == "b" {
-			bundle := osc.NewBundle(time.Now())
-			message1 := osc.NewMessage("/bundle/message/1")
-			message1.Append(int32(12345))
-			message1.Append("teststring")
-			message1.Append(true)
-			message1.Append(false)
-			message2 := osc.NewMessage("/bundle/message/2")
-			message2.Append(int32(3344))
-			message2.Append(float32(101.9))
-			message2.Append("string1")
-			message2.Append("string2")
-			message2.Append(true)
-			bundle.Append(message1)
-			bundle.Append(message2)
-			client.Send(bundle)
+			if err := client.Send(randomBundle()); err != nil {
+				fmt.Println(err)
+			}
 		} else if sline == "q" {
 			fmt.Println("Exit!")
 			os.Exit(0)
