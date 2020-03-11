@@ -139,9 +139,10 @@ func TestServerMessageDispatching(t *testing.T) {
 	port := 6677
 	addr := "localhost:" + strconv.Itoa(port)
 
-	server := &Server{Addr: addr, Dispatcher: NewStandardDispatcher()}
+	d := NewStandardDispatcher()
+	server := &Server{Addr: addr, Dispatcher: d}
 
-	if err := server.Dispatcher.(*StandardDispatcher).AddMsgHandler(
+	if err := d.AddMsgHandler(
 		"/address/test",
 		func(msg *Message) {
 			defer func() {
