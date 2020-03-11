@@ -154,7 +154,7 @@ func TestServerMessageDispatching(t *testing.T) {
 			}()
 
 			if len(msg.Arguments) != 1 {
-				t.Error("Argument length should be 1 and is: " + string(len(msg.Arguments)))
+				t.Errorf("Argument length should be 1 and is: %d", len(msg.Arguments))
 			}
 
 			if msg.Arguments[0].(int32) != 1122 {
