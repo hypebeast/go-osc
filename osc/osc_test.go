@@ -140,13 +140,15 @@ func TestServerMessageDispatching(t *testing.T) {
 	addr := "localhost:" + strconv.Itoa(port)
 
 	server := &Server{Addr: addr, Dispatcher: NewStandardDispatcher()}
-	defer server.CloseConnection()
 
 	if err := server.Dispatcher.(*StandardDispatcher).AddMsgHandler(
 		"/address/test",
 		func(msg *Message) {
 			defer func() {
-				server.CloseConnection()
+				if err := server.CloseConnection(); err != nil {
+					t.Error(err)
+				}
+
 				finish <- true
 			}()
 
