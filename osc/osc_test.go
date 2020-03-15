@@ -142,17 +142,15 @@ func TestServerMessageDispatching(t *testing.T) {
 	d := NewStandardDispatcher()
 	server := &Server{Addr: addr, Dispatcher: d}
 
+	defer func() {
+		if err := server.CloseConnection(); err != nil {
+			t.Error(err)
+		}
+	}()
+
 	if err := d.AddMsgHandler(
 		"/address/test",
 		func(msg *Message) {
-			defer func() {
-				if err := server.CloseConnection(); err != nil {
-					t.Error(err)
-				}
-
-				finish <- true
-			}()
-
 			if len(msg.Arguments) != 1 {
 				t.Errorf("Argument length should be 1 and is: %d", len(msg.Arguments))
 			}
@@ -160,6 +158,8 @@ func TestServerMessageDispatching(t *testing.T) {
 			if msg.Arguments[0].(int32) != 1122 {
 				t.Error("Argument should be 1122 and is: " + string(msg.Arguments[0].(int32)))
 			}
+
+			finish <- true
 		},
 	); err != nil {
 		t.Error("Error adding message handler")
