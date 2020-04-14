@@ -1,10 +1,10 @@
 package osc
 
 import (
-	"fmt"
 	"github.com/Lobaro/slip"
+	"log"
 	"net"
-	"os"
+	//"os"
 	"time"
 )
 
@@ -13,50 +13,64 @@ type TCPServer struct {
 	Dispatch Dispatcher
 }
 
+// ListenServe listens on the TCP connection and stats a goroutine to handle each client
 func (ts *TCPServer) ListenServe() error {
 	listener, err := net.Listen("tcp", ts.Addr)
-	checkError(err)
+	//checkError(err)
 	if err != nil {
 		return err
 	}
 
+	// close the listener down at the end
+	defer func() {
+		err = listener.Close()
+		if err != nil {
+			log.Println(err)
+		}
+	}()
+
+	// listen and handle new connections
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			fmt.Println(err)
+			log.Println(err)
 			return err
 			//continue
 		}
 		go ts.HandleClient(conn)
 	}
-	return nil
+	//return nil
 }
 
+// HandleClient takes an incoming connection and dispatches messages to the handles
 func (ts *TCPServer) HandleClient(conn net.Conn) {
 	defer func() {
-		fmt.Println("closing connection to client", conn.RemoteAddr())
+		log.Println("closing connection to client", conn.RemoteAddr())
 		err := conn.Close()
 		if err != nil {
-			fmt.Println("error closing connection", err)
+			log.Println("error closing connection", err)
 		}
 	}()
 
-	fmt.Println("new connection from", conn.RemoteAddr())
+	log.Println("new connection from", conn.RemoteAddr())
 
-	r := slip.NewReader(conn)
+	var r = slip.NewReader(conn)
 	for {
 
 		packet, _, err := r.ReadPacket()
 		if err != nil {
-			fmt.Println("error reading packet. stopping:", conn.RemoteAddr(), err)
+			log.Println("error reading packet. stopping:", conn.RemoteAddr(), err)
 			return
 		}
 		//checkError(err)
 
-		fmt.Println("new packet", string(packet))
+		log.Println("new packet", string(packet))
 		//checkError(err)
 		p, err := ParsePacket(string(packet))
-		checkError(err)
+		//checkError(err)
+		if err != nil {
+			log.Println("error parsing packet", string(packet))
+		}
 		//fmt.Printf("%T\n", p)
 		ts.Dispatch.Dispatch(p)
 		//fmt.Println("after", p)
@@ -67,55 +81,79 @@ type TCPClient struct {
 	addr          string
 	conn          net.Conn
 	w             *slip.Writer
+	r             *slip.Reader // Add read function to tcpclient
+	dispatcher    Dispatcher
 	ReconnectWait time.Duration
 }
 
-func (tc *TCPClient) Send(msg *Message) {
-	b, err := msg.MarshalBinary()
-	checkError(err)
+// Send sends an OSC pkt (a message or bundle) over the TCP connection of the client
+func (tc *TCPClient) Send(pkt Packet) {
+	b, err := pkt.MarshalBinary()
+	if err != nil {
+		log.Println("error marshalling binary of packet")
+	}
+	//checkError(err)
 	err = tc.w.WritePacket(b)
 	if err != nil {
-		fmt.Println(err)
-		tc.Reconnect()
+		log.Println("error writing packet", err)
+		log.Println("attempting to reconnect...")
+		tc.Connect()
 	}
 	//checkError(err)
 }
 
-func (tc *TCPClient) Reconnect() {
-	fmt.Println("reconnecting to", tc.addr)
+// C
+func (tc *TCPClient) Connect() {
+	log.Println("connecting to", tc.addr)
 	for {
 		c, err := net.Dial("tcp", tc.addr)
 		if err != nil {
-			fmt.Println("error connecting.", err)
-			fmt.Println("trying again after", tc.ReconnectWait)
+			log.Println("error connecting.", err)
+			log.Println("trying again after", tc.ReconnectWait)
 			time.Sleep(tc.ReconnectWait)
 			continue
 		}
 		//checkError(err)
 		tc.conn = c
-		fmt.Println("connected to", c.RemoteAddr())
+		log.Println("connected to", c.RemoteAddr())
 		w := slip.NewWriter(tc.conn)
 		tc.w = w
+		r := slip.NewReader(tc.conn)
+		tc.r = r
+		//go tc.Listen()
 		break
 	}
 }
 
-func NewTCPClient(addr string) TCPClient {
+func (tc *TCPClient) Listen() {
+	for {
+		log.Println("trying to read a packet")
+		packet, _, err := tc.r.ReadPacket()
+		if err != nil {
+			log.Println("error reading packet. stopping for 200ms:", tc.conn.RemoteAddr(), err)
+			time.Sleep(time.Millisecond * 200)
+			continue
+		}
+		//checkError(err)
+
+		log.Println("new packet", string(packet))
+		//checkError(err)
+		p, err := ParsePacket(string(packet))
+		//checkError(err)
+		if err != nil {
+			log.Println("error parsing packet", string(packet))
+		}
+		//fmt.Printf("%T\n", p)
+		tc.dispatcher.Dispatch(p)
+		//fmt.Println("after", p)
+	}
+}
+
+func NewTCPClient(addr string, d Dispatcher) TCPClient {
 	t := TCPClient{}
 	t.ReconnectWait = 200 * time.Millisecond
 	t.addr = addr
-	c, err := net.Dial("tcp", t.addr)
-	checkError(err)
-	fmt.Println("connected to", c.RemoteAddr())
-	t.conn = c
-	w := slip.NewWriter(t.conn)
-	t.w = w
-	return t
-}
+	t.dispatcher = d
 
-func checkError(err error) {
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Fatal error: %s", err.Error())
-		os.Exit(1)
-	}
+	return t
 }

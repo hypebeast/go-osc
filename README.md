@@ -23,19 +23,20 @@
   - 'F' (False)
   - 'N' (Nil)
 - Support for OSC address pattern including '\*', '?', '{,}' and '[]' wildcards
+- NEW WIP support for TCP
 
 ## Install
 
 ```shell
-go get github.com/hypebeast/go-osc
+go get github.com/showcontroller/go-osc
 ```
 
 ## Usage
 
-### Client
+### UDP Client
 
 ```go
-import "github.com/hypebeast/go-osc/osc"
+import "github.com/showcontroller/go-osc/osc"
 
 func main() {
     client := osc.NewClient("localhost", 8765)
@@ -47,12 +48,12 @@ func main() {
 }
 ```
 
-### Server
+### UDP Server
 
 ```go
 package main
 
-import "github.com/hypebeast/go-osc/osc"
+import "github.com/showcontroller/go-osc/osc"
 
 func main() {
     addr := "127.0.0.1:8765"

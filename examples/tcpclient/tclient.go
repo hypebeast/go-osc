@@ -1,6 +1,9 @@
 package main
 
 import (
+	"github.com/eiannone/keyboard"
+	"log"
+
 	//"net"
 	"os"
 	"time"
@@ -80,7 +83,18 @@ import "github.com/showcontroller/go-osc/osc"
 
 func main() {
 
-	tc := osc.NewTCPClient("10.0.0.221:8765")
+	sd := osc.NewStandardDispatcher()
+	err := sd.AddMsgHandler("*", func(msg *osc.Message) {
+		log.Println("received a message ", msg.String())
+		//osc.PrintMessage(msg)
+	})
+	if err != nil {
+		log.Println("error adding message handler", err)
+	}
+
+	tc := osc.NewTCPClient("10.0.0.221:8765", sd)
+	tc.Connect()
+	go tc.Listen()
 
 	m1 := osc.NewMessage("/led/1/high")
 	m2 := osc.NewMessage("/led/1/low")
@@ -89,9 +103,39 @@ func main() {
 	m5 := osc.NewMessage("/led/3/high")
 	m6 := osc.NewMessage("/led/3/low")
 
-	t := 250 * time.Millisecond
+	t := 500 * time.Millisecond
 
 	//tc.ReconnectWait = 1*time.Second
+
+	err = keyboard.Open()
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println("Press ESC to quit")
+	for {
+		char, key, err := keyboard.GetKey()
+		fmt.Printf("You pressed: %q\r\n", char)
+		if err != nil {
+			panic(err)
+		} else if key == keyboard.KeyEsc {
+			break
+		} else if char == '1' {
+			tc.Send(m1)
+		} else if char == '4' {
+			tc.Send(m2)
+		} else if char == '2' {
+			tc.Send(m3)
+		} else if char == '5' {
+			tc.Send(m4)
+		} else if char == '3' {
+			tc.Send(m5)
+		} else if char == '6' {
+			tc.Send(m6)
+		}
+	}
+
+	keyboard.Close()
 
 	for {
 		tc.Send(m1)
@@ -106,6 +150,7 @@ func main() {
 		time.Sleep(t)
 		tc.Send(m6)
 		time.Sleep(t)
+
 	}
 
 	//conn, _ := net.Dial("tcp", "10.0.0.221:8765")
