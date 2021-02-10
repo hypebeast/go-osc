@@ -20,8 +20,8 @@ Features:
 - OSC bundles, including timetags
 - Support for OSC address pattern including '*', '?', '{,}' and '[]' wildcards
 
-This OSC implementation uses the UDP protocol for sending and receiving
-OSC packets.
+This OSC implementation supports using UDP or TCP as the protocol for sending
+and receiving OSC packets. UDP is used by default.
 
 The unit of transmission of OSC is an OSC Packet. Any application that sends
 OSC Packets is an OSC Client; any application that receives OSC Packets is
@@ -58,6 +58,8 @@ Usage
 OSC client example:
 
     client := osc.NewClient("localhost", 8765)
+    // To use TCP instead of UDP:
+    // client := osc.NewClient("localhost", 8765, osc.ClientProtocol(osc.TCP))
     msg := osc.NewMessage("/osc/address")
     msg.Append(int32(111))
     msg.Append(true)
@@ -72,10 +74,10 @@ OSC server example:
         osc.PrintMessage(msg)
     })
 
-    server := &osc.Server{
-        Addr: addr,
-        Dispatcher:d,
-    }
+		server := osc.NewServer(addr, d, 0)
+    // To use TCP instead of UDP:
+    // server := osc.NewServer(addr, d, 0, osc.ServerProtocol(osc.TCP))
+
     server.ListenAndServe()
 */
 package osc
