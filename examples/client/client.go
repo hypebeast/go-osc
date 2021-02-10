@@ -81,7 +81,7 @@ func main() {
 
 	numArgs := len(os.Args[1:])
 
-	if numArgs != 2 {
+	if numArgs != 1 {
 		printUsage()
 		os.Exit(1)
 	}
