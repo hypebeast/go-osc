@@ -22,7 +22,6 @@ const (
 
 var data = make([]byte, 65535)
 var buf = bytes.NewBuffer(data)
-var b = make([]byte, 1)
 
 
 // Packet is the interface for Message and Bundle.
@@ -616,26 +615,22 @@ func ParsePacket(msg string) (Packet, error) {
 
 // receivePacket receives an OSC packet from the given reader.
 func readPacket(reader *bytes.Buffer, start *int, end int) (Packet, error) {
-	//var buf []byte
-	_, err := reader.Read(b)
+	b, err := reader.ReadByte()
 	if err != nil {
 		return nil, err
 	}
-
-	err = reader.UnreadByte()
-	if err != nil {
-		return nil, err
-	}
+	
+	reader.UnreadByte()
 
 	// An OSC Message starts with a '/'
-	if b[0] == '/' {
+	if b == '/' {
 		packet, err := readMessage(reader, start)
 		if err != nil {
 			return nil, err
 		}
 		return packet, nil
 	}
-	if b[0] == '#' { // An OSC bundle starts with a '#'
+	if b == '#' { // An OSC bundle starts with a '#'
 		packet, err := readBundle(reader, start, end)
 		if err != nil {
 			return nil, err
