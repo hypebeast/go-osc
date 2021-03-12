@@ -3,7 +3,6 @@
 package osc
 
 import (
-	"bufio"
 	"bytes"
 	"encoding"
 	"encoding/binary"
@@ -20,6 +19,11 @@ const (
 	secondsFrom1900To1970 = 2208988800
 	bundleTagString       = "#bundle"
 )
+
+var data = make([]byte, 65535)
+var buf = bytes.NewBuffer(data)
+var b = make([]byte, 1)
+
 
 // Packet is the interface for Message and Bundle.
 type Packet interface {
@@ -581,14 +585,19 @@ func (s *Server) readFromConnection(c net.PacketConn) (Packet, error) {
 		}
 	}
 
-	data := make([]byte, 65535)
 	n, _, err := c.ReadFrom(data)
 	if err != nil {
 		return nil, err
 	}
 
+	buf.Reset()
+	_, err = buf.Write(data)
+	if err != nil {
+		return nil, err
+	}
+
 	var start int
-	p, err := readPacket(bufio.NewReader(bytes.NewBuffer(data)), &start, n)
+	p, err := readPacket(buf, &start, n)
 	if err != nil {
 		return nil, err
 	}
@@ -598,7 +607,7 @@ func (s *Server) readFromConnection(c net.PacketConn) (Packet, error) {
 // ParsePacket parses the given msg string and returns a Packet
 func ParsePacket(msg string) (Packet, error) {
 	var start int
-	p, err := readPacket(bufio.NewReader(bytes.NewBufferString(msg)), &start, len(msg))
+	p, err := readPacket(bytes.NewBufferString(msg), &start, len(msg))
 	if err != nil {
 		return nil, err
 	}
@@ -606,22 +615,27 @@ func ParsePacket(msg string) (Packet, error) {
 }
 
 // receivePacket receives an OSC packet from the given reader.
-func readPacket(reader *bufio.Reader, start *int, end int) (Packet, error) {
+func readPacket(reader *bytes.Buffer, start *int, end int) (Packet, error) {
 	//var buf []byte
-	buf, err := reader.Peek(1)
+	_, err := reader.Read(b)
+	if err != nil {
+		return nil, err
+	}
+
+	err = reader.UnreadByte()
 	if err != nil {
 		return nil, err
 	}
 
 	// An OSC Message starts with a '/'
-	if buf[0] == '/' {
+	if b[0] == '/' {
 		packet, err := readMessage(reader, start)
 		if err != nil {
 			return nil, err
 		}
 		return packet, nil
 	}
-	if buf[0] == '#' { // An OSC bundle starts with a '#'
+	if b[0] == '#' { // An OSC bundle starts with a '#'
 		packet, err := readBundle(reader, start, end)
 		if err != nil {
 			return nil, err
@@ -634,7 +648,7 @@ func readPacket(reader *bufio.Reader, start *int, end int) (Packet, error) {
 }
 
 // readBundle reads an Bundle from reader.
-func readBundle(reader *bufio.Reader, start *int, end int) (*Bundle, error) {
+func readBundle(reader *bytes.Buffer, start *int, end int) (*Bundle, error) {
 	// Read the '#bundle' OSC string
 	startTag, n, err := readPaddedString(reader)
 	if err != nil {
@@ -678,7 +692,7 @@ func readBundle(reader *bufio.Reader, start *int, end int) (*Bundle, error) {
 }
 
 // readMessage from `reader`.
-func readMessage(reader *bufio.Reader, start *int) (*Message, error) {
+func readMessage(reader *bytes.Buffer, start *int) (*Message, error) {
 	// First, read the OSC address
 	addr, n, err := readPaddedString(reader)
 	if err != nil {
@@ -696,7 +710,7 @@ func readMessage(reader *bufio.Reader, start *int) (*Message, error) {
 }
 
 // readArguments from `reader` and add them to the OSC message `msg`.
-func readArguments(msg *Message, reader *bufio.Reader, start *int) error {
+func readArguments(msg *Message, reader *bytes.Buffer, start *int) error {
 	// Read the type tag string
 	var n int
 	typetags, n, err := readPaddedString(reader)
@@ -889,7 +903,7 @@ func timetagToTime(timetag uint64) (t time.Time) {
 
 // readBlob reads an OSC blob from the blob byte array. Padding bytes are
 // removed from the reader and not returned.
-func readBlob(reader *bufio.Reader) ([]byte, int, error) {
+func readBlob(reader *bytes.Buffer) ([]byte, int, error) {
 	// First, get the length
 	var blobLen int32
 	if err := binary.Read(reader, binary.BigEndian, &blobLen); err != nil {
@@ -946,7 +960,7 @@ func writeBlob(data []byte, buf *bytes.Buffer) (int, error) {
 
 // readPaddedString reads a padded string from the given reader. The padding
 // bytes are removed from the reader.
-func readPaddedString(reader *bufio.Reader) (string, int, error) {
+func readPaddedString(reader *bytes.Buffer) (string, int, error) {
 	// Read the string from the reader
 	str, err := reader.ReadString(0)
 	if err != nil {
