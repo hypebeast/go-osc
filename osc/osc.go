@@ -177,6 +177,8 @@ func (s *StandardDispatcher) Dispatch(packet Packet) {
 // Message
 ////
 
+var str []byte
+
 // NewMessage returns a new Message. The address parameter is the OSC address.
 func NewMessage(addr string, args ...interface{}) *Message {
 	return &Message{Address: addr, Arguments: args}
