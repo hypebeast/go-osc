@@ -220,6 +220,10 @@ func (msg *Message) TypeTags() (string, error) {
 	if msg == nil {
 		return "", fmt.Errorf("message is nil")
 	}
+	
+	if len(msg.Arguments = 0) {
+		return "", nil
+	}
 
 	tags := []byte{','}
 	for _, m := range msg.Arguments {
