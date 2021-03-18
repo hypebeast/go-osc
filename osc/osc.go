@@ -225,7 +225,7 @@ func (msg *Message) TypeTags() (string, error) {
 
 	tags := []byte{','}
 	for _, m := range msg.Arguments {
-		s, err := GetTypeTag(m)
+		s, err := getTypeTag(m)
 		if err != nil {
 			return "", err
 		}
