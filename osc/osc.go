@@ -210,11 +210,7 @@ func (msg *Message) ClearData() {
 // Match returns true, if the OSC address pattern of the OSC Message matches the given
 // address. The match is case sensitive!
 func (msg *Message) Match(addr string) bool {
-	exp := getRegEx(msg.Address)
-	if exp.MatchString(addr) {
-		return true
-	}
-	return false
+	return getRegEx(msg.Address).MatchString(addr)
 }
 
 // TypeTags returns the type tag string.
@@ -223,7 +219,7 @@ func (msg *Message) TypeTags() (string, error) {
 		return "", fmt.Errorf("message is nil")
 	}
 	
-	if len(msg.Arguments) = 0 {
+	if len(msg.Arguments) == 0 {
 		return "", nil
 	}
 
@@ -301,7 +297,7 @@ func (msg *Message) MarshalBinary() ([]byte, error) {
 			return nil, fmt.Errorf("OSC - unsupported type: %T", t)
 
 		case bool:
-			if arg.(bool) == true {
+			if t == true {
 				typetags = append(typetags, 'T')
 			} else {
 				typetags = append(typetags, 'F')
@@ -348,8 +344,7 @@ func (msg *Message) MarshalBinary() ([]byte, error) {
 
 		case Timetag:
 			typetags = append(typetags, 't')
-			timeTag := arg.(Timetag)
-			b, err := timeTag.MarshalBinary()
+			b, err := t.MarshalBinary()
 			if err != nil {
 				return nil, err
 			}
@@ -699,6 +694,11 @@ func readArguments(msg *Message, reader *bytes.Buffer, start *int) error {
 		return err
 	}
 	*start += n
+	
+	// if there is no typetag, quit
+	if len(typetags) == 0 {
+		return nil
+	}
 
 	// If the typetag doesn't start with ',', it's not valid
 	if typetags[0] != ',' {
@@ -1041,7 +1041,7 @@ func getRegEx(pattern string) *regexp.Regexp {
 func getTypeTag(arg interface{}) (string, error) {
 	switch t := arg.(type) {
 	case bool:
-		if arg.(bool) {
+		if t {
 			return "T", nil
 		}
 		return "F", nil
