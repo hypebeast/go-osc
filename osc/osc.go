@@ -221,7 +221,7 @@ func (msg *Message) TypeTags() (string, error) {
 		return "", fmt.Errorf("message is nil")
 	}
 	
-	if len(msg.Arguments = 0) {
+	if len(msg.Arguments) = 0 {
 		return "", nil
 	}
 
