@@ -218,7 +218,7 @@ func (msg *Message) TypeTags() (string, error) {
 	if msg == nil {
 		return "", fmt.Errorf("message is nil")
 	}
-	
+
 	if len(msg.Arguments) == 0 {
 		return "", nil
 	}
@@ -297,7 +297,7 @@ func (msg *Message) MarshalBinary() ([]byte, error) {
 			return nil, fmt.Errorf("OSC - unsupported type: %T", t)
 
 		case bool:
-			if t == true {
+			if t {
 				typetags = append(typetags, 'T')
 			} else {
 				typetags = append(typetags, 'F')
@@ -404,13 +404,12 @@ func (b *Bundle) Append(pck Packet) error {
 func (b *Bundle) MarshalBinary() ([]byte, error) {
 	// Add the '#bundle' string
 	data := new(bytes.Buffer)
-	if _, err = writePaddedString("#bundle", data); err != nil {
+	if _, err := writePaddedString("#bundle", data); err != nil {
 		return nil, err
 	}
 
 	// Add the time tag
-	var bd []byte
-	bd, err = b.Timetag.MarshalBinary()
+	bd, err := b.Timetag.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
@@ -420,8 +419,7 @@ func (b *Bundle) MarshalBinary() ([]byte, error) {
 
 	// Process all OSC Messages
 	for _, m := range b.Messages {
-		var buf []byte
-		buf, err = m.MarshalBinary()
+		buf, err := m.MarshalBinary()
 		if err != nil {
 			return nil, err
 		}
@@ -439,8 +437,7 @@ func (b *Bundle) MarshalBinary() ([]byte, error) {
 
 	// Process all OSC Bundles
 	for _, b := range b.Bundles {
-		var buf []byte
-		buf, err = b.MarshalBinary()
+		buf, err := b.MarshalBinary()
 		if err != nil {
 			return nil, err
 		}
@@ -498,8 +495,11 @@ func (c *Client) Send(packet Packet) error {
 	if err != nil {
 		return err
 	}
-
-	return conn.Write(data)
+	
+	if _, err = conn.Write(data); err != nil {
+		return err
+	}
+	return nil
 }
 
 ////
@@ -509,17 +509,7 @@ func (c *Client) Send(packet Packet) error {
 var (
 	data = make([]byte, 65535)
 	buf  = bytes.NewBuffer(data)
-	n    int
-	err  error
 )
-
-// Server represents an OSC server. The server listens on Address and Port for
-// incoming OSC packets and bundles.
-type Server struct {
-	Addr        string
-	Dispatcher  Dispatcher
-	ReadTimeout time.Duration
-}
 
 // ListenAndServe retrieves incoming OSC packets and dispatches the retrieved
 // OSC packets.
@@ -571,12 +561,12 @@ func (s *Server) ReceivePacket(c net.PacketConn) (Packet, error) {
 // readFromConnection retrieves OSC packets.
 func (s *Server) readFromConnection(c net.PacketConn) (Packet, error) {
 	if s.ReadTimeout != 0 {
-		if err = c.SetReadDeadline(time.Now().Add(s.ReadTimeout)); err != nil {
+		if err := c.SetReadDeadline(time.Now().Add(s.ReadTimeout)); err != nil {
 			return nil, err
 		}
 	}
 
-	n, _, err = c.ReadFrom(data)
+	n, _, err := c.ReadFrom(data)
 	if err != nil {
 		return nil, err
 	}
@@ -599,8 +589,7 @@ func ParsePacket(msg string) (Packet, error) {
 
 // receivePacket receives an OSC packet from the given reader.
 func readPacket(reader *bytes.Buffer, start *int, end int) (Packet, error) {
-	var b byte
-	b, err = reader.ReadByte()
+	b, err := reader.ReadByte()
 	if err != nil {
 		return nil, err
 	}
@@ -623,8 +612,7 @@ func readPacket(reader *bytes.Buffer, start *int, end int) (Packet, error) {
 // readBundle reads a Bundle from reader.
 func readBundle(reader *bytes.Buffer, start *int, end int) (*Bundle, error) {
 	// Read the '#bundle' OSC string
-	var startTag string
-	startTag, n, err = readPaddedString(reader)
+	startTag, n, err := readPaddedString(reader)
 	if err != nil {
 		return nil, err
 	}
@@ -669,8 +657,7 @@ func readBundle(reader *bytes.Buffer, start *int, end int) (*Bundle, error) {
 // readMessage from `reader`.
 func readMessage(reader *bytes.Buffer, start *int) (*Message, error) {
 	// First, read the OSC address
-	var addr string
-	addr, n, err = readPaddedString(reader)
+	addr, n, err := readPaddedString(reader)
 	if err != nil {
 		return nil, err
 	}
@@ -688,14 +675,12 @@ func readMessage(reader *bytes.Buffer, start *int) (*Message, error) {
 // readArguments from `reader` and add them to the OSC message `msg`.
 func readArguments(msg *Message, reader *bytes.Buffer, start *int) error {
 	// Read the type tag string
-	var typetags string
-	typetags, n, err = readPaddedString(reader)
+	typetags, n, err := readPaddedString(reader)
 	if err != nil {
 		return err
 	}
 	*start += n
-	
-	// if there is no typetag, quit
+
 	if len(typetags) == 0 {
 		return nil
 	}
@@ -894,14 +879,14 @@ var padBytes = make([]byte, 4)
 func readBlob(reader *bytes.Buffer) ([]byte, int, error) {
 	// First, get the length
 	var blobLen int32
-	if err = binary.Read(reader, binary.BigEndian, &blobLen); err != nil {
+	if err := binary.Read(reader, binary.BigEndian, &blobLen); err != nil {
 		return nil, 0, err
 	}
-	n = 4 + int(blobLen)
+	n := 4 + int(blobLen)
 
 	// Read the data
 	blob := make([]byte, blobLen)
-	if _, err = reader.Read(blob); err != nil {
+	if _, err := reader.Read(blob); err != nil {
 		return nil, 0, err
 	}
 
@@ -920,19 +905,19 @@ func readBlob(reader *bytes.Buffer) ([]byte, int, error) {
 func writeBlob(data []byte, buf *bytes.Buffer) (int, error) {
 	// Add the size of the blob
 	dlen := int32(len(data))
-	if err = binary.Write(buf, binary.BigEndian, dlen); err != nil {
+	if err := binary.Write(buf, binary.BigEndian, dlen); err != nil {
 		return 0, err
 	}
 
 	// Write the data
-	if _, err = buf.Write(data); err != nil {
+	if _, err := buf.Write(data); err != nil {
 		return 0, nil
 	}
 
 	// Add padding bytes if necessary
 	numPadBytes := padBytesNeeded(len(data))
 	if numPadBytes > 0 {
-		n, err = buf.Write(padBytes[:numPadBytes])
+		n, err := buf.Write(padBytes[:numPadBytes])
 		if err != nil {
 			return 0, err
 		}
@@ -946,33 +931,32 @@ func writeBlob(data []byte, buf *bytes.Buffer) (int, error) {
 // bytes are removed from the reader.
 func readPaddedString(reader *bytes.Buffer) (string, int, error) {
 	//Read the string from the reader
-	var strn string
-	strn, err = reader.ReadString(0)
+	str, err := reader.ReadString(0)
 	if err != nil {
 		return "", 0, err
 	}
 
-	n = len(strn)
+	n := len(str)
 
 	// Remove the string delimiter, in order to calculate the right amount
 	// of padding bytes
-	strn = strn[:n-1]
+	str = str[:n-1]
 
 	// Remove the padding bytes
-	padLen := padBytesNeeded(len(strn)) - 1
+	padLen := padBytesNeeded(len(str)) - 1
 	if padLen > 0 {
 		n += padLen
 		reader.Next(padLen)
 	}
 
-	return strn, n, nil
+	return str, n, nil
 }
 
 // writePaddedString writes a string with padding bytes to the a buffer.
 // Returns, the number of written bytes and an error if any.
 func writePaddedString(str string, buf *bytes.Buffer) (int, error) {
 	// Write the string to the buffer
-	n, err = buf.WriteString(str)
+	n, err := buf.WriteString(str)
 	if err != nil {
 		return 0, err
 	}
