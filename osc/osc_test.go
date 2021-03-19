@@ -364,7 +364,7 @@ func TestPadBytesNeeded(t *testing.T) {
 	if n != 2 {
 		t.Errorf("Number of pad bytes should be 2 and is: %d", n)
 	}
-	
+
 	n = padBytesNeeded(1)
 	if n != 3 {
 		t.Errorf("Number of pad bytes should be 3 and is: %d", n)
