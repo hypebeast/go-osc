@@ -351,8 +351,8 @@ func TestWritePaddedString(t *testing.T) {
 func TestPadBytesNeeded(t *testing.T) {
 	var n int
 	n = padBytesNeeded(4)
-	if n != 4 {
-		t.Errorf("Number of pad bytes should be 4 and is: %d", n)
+	if n != 0 {
+		t.Errorf("Number of pad bytes should be 0 and is: %d", n)
 	}
 
 	n = padBytesNeeded(3)
@@ -360,19 +360,24 @@ func TestPadBytesNeeded(t *testing.T) {
 		t.Errorf("Number of pad bytes should be 1 and is: %d", n)
 	}
 
+	n = padBytesNeeded(2)
+	if n != 2 {
+		t.Errorf("Number of pad bytes should be 2 and is: %d", n)
+	}
+	
 	n = padBytesNeeded(1)
 	if n != 3 {
 		t.Errorf("Number of pad bytes should be 3 and is: %d", n)
 	}
 
 	n = padBytesNeeded(0)
-	if n != 4 {
-		t.Errorf("Number of pad bytes should be 4 and is: %d", n)
+	if n != 0 {
+		t.Errorf("Number of pad bytes should be 0 and is: %d", n)
 	}
 
 	n = padBytesNeeded(32)
-	if n != 4 {
-		t.Errorf("Number of pad bytes should be 4 and is: %d", n)
+	if n != 0 {
+		t.Errorf("Number of pad bytes should be 0 and is: %d", n)
 	}
 
 	n = padBytesNeeded(63)
