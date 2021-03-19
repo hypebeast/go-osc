@@ -316,7 +316,7 @@ func TestReadPaddedString(t *testing.T) {
 		s   string // resulting string
 	}{
 		{[]byte{'t', 'e', 's', 't', 's', 't', 'r', 'i', 'n', 'g', 0, 0}, 12, "teststring"},
-		{[]byte{'t', 'e', 's', 't', 0, 0, 0, 0}, 8, "test"},
+		{[]byte{'t', 'e', 's', 't'}, 4, "test"},
 	} {
 		buf := bytes.NewBuffer(tt.buf)
 		s, n, err := readPaddedString(bufio.NewReader(buf))
