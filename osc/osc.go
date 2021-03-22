@@ -998,7 +998,7 @@ func writePaddedString(str string, buf *bytes.Buffer) (int, error) {
 // padBytesNeeded determines how many bytes are needed to fill up to the next 4
 // byte length.
 func padBytesNeeded(elementLen int) int {
-	return ((4 - elementLen) % 4)
+	return ((4 - (elementLen % 4)) % 4)
 }
 
 ////
