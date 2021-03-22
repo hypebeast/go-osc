@@ -330,13 +330,13 @@ func TestReadPaddedString(t *testing.T) {
 		buf := bytes.NewBuffer(tt.buf)
 		s, n, err := readPaddedString(bufio.NewReader(buf))
 		if got, want := err, tt.e; got != want {
-			t.Errorf("%s: Unexpected error reading padded string; got = %s, want = %s", tt.s, got, want)
+			t.Errorf("%q: Unexpected error reading padded string; got = %q, want = %q", tt.s, got, want)
 		}
 		if got, want := n, tt.n; got != want {
-			t.Errorf("%s: Bytes needed don't match; got = %d, want = %d", tt.s, got, want)
+			t.Errorf("%q: Bytes needed don't match; got = %d, want = %d", tt.s, got, want)
 		}
 		if got, want := s, tt.s; got != want {
-			t.Errorf("%s: Strings don't match; got = %s, want = %s", tt.s, got, want)
+			t.Errorf("%q: Strings don't match; got = %q, want = %q", tt.s, got, want)
 		}
 	}
 }
@@ -365,10 +365,10 @@ func TestWritePaddedString(t *testing.T) {
 			t.Errorf(err.Error())
 		}
 		if got, want := n, tt.n; got != want {
-			t.Errorf("%s: Count of bytes written don't match; got = %d, want = %d", tt.s, got, want)
+			t.Errorf("%q: Count of bytes written don't match; got = %d, want = %d", tt.s, got, want)
 		}
 		if got, want := bytesBuffer, tt.buf; bytes.Equal(got.Bytes(), want) {
-			t.Errorf("%s: Buffers don't match; got = %s, want = %s", tt.s, got.Bytes(), want)
+			t.Errorf("%q: Buffers don't match; got = %q, want = %q", tt.s, got.Bytes(), want)
 		}
 	}
 }
