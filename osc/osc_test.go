@@ -192,7 +192,7 @@ func TestServerMessageReceiving(t *testing.T) {
 
 		packet, err := server.ReceivePacket(c)
 		if err != nil {
-			t.Error("Server error")
+			t.Errorf("server error: %v", err)
 			return
 		}
 		if packet == nil {
