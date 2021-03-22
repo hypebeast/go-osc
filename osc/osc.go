@@ -978,7 +978,7 @@ func writePaddedString(str string, buf *bytes.Buffer) (int, error) {
 	}
 
 	// Add a null terminator if not already present
-	if str[:len(str)-1] != 0 {
+	if str[len(str)-1] != 0 {
 		buf.WriteByte(0)
 		n += 1
 	}
