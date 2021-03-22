@@ -973,7 +973,7 @@ func readPaddedString(reader *bufio.Reader) (string, int, error) {
 func writePaddedString(str string, buf *bytes.Buffer) (int, error) {
 	// Truncate at the first null, just in case there is more than one present
 	nullIndex := strings.Index(str, "\x00")
-	if (nullIndex > 0) {
+	if nullIndex > 0 {
 		str = str[:nullIndex]
 	}
 	// Write the string to the buffer
