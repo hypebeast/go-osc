@@ -318,7 +318,9 @@ func TestReadPaddedString(t *testing.T) {
 		{[]byte{'t', 'e', 's', 't', 's', 't', 'r', 'i', 'n', 'g', 0, 0}, 12, "teststring"},
 		{[]byte{'t', 'e', 's', 't', 'e', 'r', 's', 0}, 8, "testers"},
 		{[]byte{'t', 'e', 's', 't', 's', 0, 0, 0}, 8, "tests"},
-		{[]byte{'t', 'e', 's', 't'}, 4, "test"},
+		{[]byte{'t', 'e', 's', 't', 0, 0, 0, 0}, 8, "test"},
+		{[]byte{'t', 'e', 's', 0}, 4, "tes", nil}, // OSC uses null terminated strings
+		{[]byte{'t', 'e', 's', 't'}, 0, "", io.EOF}, // if there is no null byte at the end, it doesn't work.
 	} {
 		buf := bytes.NewBuffer(tt.buf)
 		s, n, err := readPaddedString(bufio.NewReader(buf))
