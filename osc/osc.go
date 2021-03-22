@@ -956,7 +956,7 @@ func readPaddedString(reader *bufio.Reader) (string, int, error) {
 
 	// Remove the string delimiter, in order to calculate the right amount
 	// of padding bytes
-	str = str[:len(str)-1]
+	// str = str[:len(str)-1]
 
 	// Remove the padding bytes
 	padLen := padBytesNeeded(len(str))
