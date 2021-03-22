@@ -321,7 +321,7 @@ func TestReadPaddedString(t *testing.T) {
 		{[]byte{'t', 'e', 's', 't', 'e', 'r', 's', 0}, 8, "testers", nil},
 		{[]byte{'t', 'e', 's', 't', 's', 0, 0, 0}, 8, "tests", nil},
 		{[]byte{'t', 'e', 's', 't', 0, 0, 0, 0}, 8, "test", nil},
-		{[]byte{}, 0, "", nil},
+		{[]byte{}, 0, "", io.EOF},
 		{[]byte{'t', 'e', 's', 0}, 4, "tes", nil},   // OSC uses null terminated strings
 		{[]byte{'t', 'e', 's', 't'}, 0, "", io.EOF}, // if there is no null byte at the end, it doesn't work.
 	} {
@@ -350,6 +350,7 @@ func TestWritePaddedString(t *testing.T) {
 		{"tests", []byte{'t', 'e', 's', 't', 's', 0, 0, 0}, 8},
 		{"test", []byte{'t', 'e', 's', 't', 0, 0, 0, 0}, 8},
 		{"tes", []byte{'t', 'e', 's', 0}, 4},
+		{"tes\0", []byte{'t', 'e', 's', 0}, 4}, // Don't add a second null terminator if one is already present
 		{"", []byte{0, 0, 0, 0}, 4}, // OSC uses null terminated strings, padded to the 4 byte boundary
 	} {
 		buf := []byte{}
