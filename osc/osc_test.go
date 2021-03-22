@@ -367,7 +367,7 @@ func TestWritePaddedString(t *testing.T) {
 		if got, want := n, tt.n; got != want {
 			t.Errorf("%q: Count of bytes written don't match; got = %d, want = %d", tt.s, got, want)
 		}
-		if got, want := bytesBuffer, tt.buf; bytes.Equal(got.Bytes(), want) {
+		if got, want := bytesBuffer, tt.buf; !bytes.Equal(got.Bytes(), want) {
 			t.Errorf("%q: Buffers don't match; got = %q, want = %q", tt.s, got.Bytes(), want)
 		}
 	}
