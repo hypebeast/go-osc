@@ -322,8 +322,10 @@ func TestReadPaddedString(t *testing.T) {
 		{[]byte{'t', 'e', 's', 't', 's', 0, 0, 0}, 8, "tests", nil},
 		{[]byte{'t', 'e', 's', 't', 0, 0, 0, 0}, 8, "test", nil},
 		{[]byte{}, 0, "", io.EOF},
-		{[]byte{'t', 'e', 's', 0}, 4, "tes", nil},   // OSC uses null terminated strings
-		{[]byte{'t', 'e', 's', 't'}, 0, "", io.EOF}, // if there is no null byte at the end, it doesn't work.
+		{[]byte{'t', 'e', 's', 0}, 4, "tes", nil},             // OSC uses null terminated strings
+		{[]byte{'t', 'e', 's', 0, 0, 0, 0, 0}, 4, "tes", nil}, // Additional nulls should be ignored
+		{[]byte{'t', 'e', 's', 0, 0, 0}, 4, "tes", nil},       // Whether or not the nulls fall on a 4 byte padding boundary
+		{[]byte{'t', 'e', 's', 't'}, 0, "", io.EOF},           // if there is no null byte at the end, it doesn't work.
 	} {
 		buf := bytes.NewBuffer(tt.buf)
 		s, n, err := readPaddedString(bufio.NewReader(buf))
@@ -350,8 +352,10 @@ func TestWritePaddedString(t *testing.T) {
 		{"tests", []byte{'t', 'e', 's', 't', 's', 0, 0, 0}, 8},
 		{"test", []byte{'t', 'e', 's', 't', 0, 0, 0, 0}, 8},
 		{"tes", []byte{'t', 'e', 's', 0}, 4},
-		{"tes\0", []byte{'t', 'e', 's', 0}, 4}, // Don't add a second null terminator if one is already present
-		{"", []byte{0, 0, 0, 0}, 4}, // OSC uses null terminated strings, padded to the 4 byte boundary
+		{"tes\x00", []byte{'t', 'e', 's', 0}, 4},                 // Don't add a second null terminator if one is already present
+		{"tes\x00\x00\x00\x00\x00", []byte{'t', 'e', 's', 0}, 4}, // Skip extra nulls
+		{"tes\x00\x00\x00", []byte{'t', 'e', 's', 0}, 4},         // Even if they don't fall on a 4 byte padding boundary
+		{"", []byte{0, 0, 0, 0}, 4},                              // OSC uses null terminated strings, padded to the 4 byte boundary
 	} {
 		buf := []byte{}
 		bytesBuffer := bytes.NewBuffer(buf)
