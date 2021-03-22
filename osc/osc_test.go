@@ -3,6 +3,7 @@ package osc
 import (
 	"bufio"
 	"bytes"
+	"io"
 	"net"
 	"reflect"
 	"sync"
@@ -314,18 +315,19 @@ func TestReadPaddedString(t *testing.T) {
 		buf []byte // buffer
 		n   int    // bytes needed
 		s   string // resulting string
+		e   error  // expected error
 	}{
-		{[]byte{'t', 'e', 's', 't', 's', 't', 'r', 'i', 'n', 'g', 0, 0}, 12, "teststring"},
-		{[]byte{'t', 'e', 's', 't', 'e', 'r', 's', 0}, 8, "testers"},
-		{[]byte{'t', 'e', 's', 't', 's', 0, 0, 0}, 8, "tests"},
-		{[]byte{'t', 'e', 's', 't', 0, 0, 0, 0}, 8, "test"},
-		{[]byte{'t', 'e', 's', 0}, 4, "tes", nil}, // OSC uses null terminated strings
+		{[]byte{'t', 'e', 's', 't', 's', 't', 'r', 'i', 'n', 'g', 0, 0}, 12, "teststring", nil},
+		{[]byte{'t', 'e', 's', 't', 'e', 'r', 's', 0}, 8, "testers", nil},
+		{[]byte{'t', 'e', 's', 't', 's', 0, 0, 0}, 8, "tests", nil},
+		{[]byte{'t', 'e', 's', 't', 0, 0, 0, 0}, 8, "test", nil},
+		{[]byte{'t', 'e', 's', 0}, 4, "tes", nil},   // OSC uses null terminated strings
 		{[]byte{'t', 'e', 's', 't'}, 0, "", io.EOF}, // if there is no null byte at the end, it doesn't work.
 	} {
 		buf := bytes.NewBuffer(tt.buf)
 		s, n, err := readPaddedString(bufio.NewReader(buf))
-		if err != nil {
-			t.Errorf("%s: Error reading padded string: %s", s, err)
+		if got, want := err, tt.e; got != want {
+			t.Errorf("%s: Unexpected error reading padded string; got = %s, want = %s", tt.s, got, want)
 		}
 		if got, want := n, tt.n; got != want {
 			t.Errorf("%s: Bytes needed don't match; got = %d, want = %d", tt.s, got, want)
