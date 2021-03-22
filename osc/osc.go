@@ -977,8 +977,14 @@ func writePaddedString(str string, buf *bytes.Buffer) (int, error) {
 		return 0, err
 	}
 
+	// Add a null terminator if not already present
+	if str[:len(str)-1] != 0 {
+		buf.WriteByte(0)
+		n += 1
+	}
+
 	// Calculate the padding bytes needed and create a buffer for the padding bytes
-	numPadBytes := padBytesNeeded(len(str))
+	numPadBytes := padBytesNeeded(n)
 	if numPadBytes > 0 {
 		padBytes := make([]byte, numPadBytes)
 		// Add the padding bytes to the buffer
