@@ -316,6 +316,8 @@ func TestReadPaddedString(t *testing.T) {
 		s   string // resulting string
 	}{
 		{[]byte{'t', 'e', 's', 't', 's', 't', 'r', 'i', 'n', 'g', 0, 0}, 12, "teststring"},
+		{[]byte{'t', 'e', 's', 't', 'e', 'r', 's', 0}, 8, "testers"},
+		{[]byte{'t', 'e', 's', 't', 's', 0, 0, 0}, 8, "tests"},
 		{[]byte{'t', 'e', 's', 't'}, 4, "test"},
 	} {
 		buf := bytes.NewBuffer(tt.buf)
@@ -373,6 +375,16 @@ func TestPadBytesNeeded(t *testing.T) {
 	n = padBytesNeeded(0)
 	if n != 0 {
 		t.Errorf("Number of pad bytes should be 0 and is: %d", n)
+	}
+
+	n = padBytesNeeded(5)
+	if n != 3 {
+		t.Errorf("Number of pad bytes should be 3 and is: %d", n)
+	}
+
+	n = padBytesNeeded(7)
+	if n != 1 {
+		t.Errorf("Number of pad bytes should be 1 and is: %d", n)
 	}
 
 	n = padBytesNeeded(32)
