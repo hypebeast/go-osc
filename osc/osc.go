@@ -971,17 +971,20 @@ func readPaddedString(reader *bufio.Reader) (string, int, error) {
 // writePaddedString writes a string with padding bytes to the a buffer.
 // Returns, the number of written bytes and an error if any.
 func writePaddedString(str string, buf *bytes.Buffer) (int, error) {
+	// Truncate at the first null, just in case there is more than one present
+	nullIndex := strings.Index(str, "\x00")
+	if (nullIndex > 0) {
+		str = str[:nullIndex]
+	}
 	// Write the string to the buffer
 	n, err := buf.WriteString(str)
 	if err != nil {
 		return 0, err
 	}
 
-	// Add a null terminator if not already present
-	if str[len(str)-1] != 0 {
-		buf.WriteByte(0)
-		n += 1
-	}
+	// Always write a null terminator, as we stripped it earlier if it existed
+	buf.WriteByte(0)
+	n += 1
 
 	// Calculate the padding bytes needed and create a buffer for the padding bytes
 	numPadBytes := padBytesNeeded(n)
