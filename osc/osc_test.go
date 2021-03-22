@@ -317,10 +317,11 @@ func TestReadPaddedString(t *testing.T) {
 		s   string // resulting string
 		e   error  // expected error
 	}{
-		{[]byte{'t', 'e', 's', 't', 's', 't', 'r', 'i', 'n', 'g', 0, 0}, 12, "teststring", nil},
+		{[]byte{'t', 'e', 's', 't', 'S', 't', 'r', 'i', 'n', 'g', 0, 0}, 12, "testString", nil},
 		{[]byte{'t', 'e', 's', 't', 'e', 'r', 's', 0}, 8, "testers", nil},
 		{[]byte{'t', 'e', 's', 't', 's', 0, 0, 0}, 8, "tests", nil},
 		{[]byte{'t', 'e', 's', 't', 0, 0, 0, 0}, 8, "test", nil},
+		{[]byte{}, 0, "", nil},
 		{[]byte{'t', 'e', 's', 0}, 4, "tes", nil},   // OSC uses null terminated strings
 		{[]byte{'t', 'e', 's', 't'}, 0, "", io.EOF}, // if there is no null byte at the end, it doesn't work.
 	} {
@@ -339,18 +340,31 @@ func TestReadPaddedString(t *testing.T) {
 }
 
 func TestWritePaddedString(t *testing.T) {
-	buf := []byte{}
-	bytesBuffer := bytes.NewBuffer(buf)
-	testString := "testString"
-	expectedNumberOfWrittenBytes := len(testString) + padBytesNeeded(len(testString))
+	for _, tt := range []struct {
+		s   string // string
+		buf []byte // resulting buffer
+		n   int    // bytes expected
+	}{
+		{"testString", []byte{'t', 'e', 's', 't', 'S', 't', 'r', 'i', 'n', 'g', 0, 0}, 12},
+		{"testers", []byte{'t', 'e', 's', 't', 'e', 'r', 's', 0}, 8},
+		{"tests", []byte{'t', 'e', 's', 't', 's', 0, 0, 0}, 8},
+		{"test", []byte{'t', 'e', 's', 't', 0, 0, 0, 0}, 8},
+		{"tes", []byte{'t', 'e', 's', 0}, 4},
+		{"", []byte{0, 0, 0, 0}, 4}, // OSC uses null terminated strings, padded to the 4 byte boundary
+	} {
+		buf := []byte{}
+		bytesBuffer := bytes.NewBuffer(buf)
 
-	n, err := writePaddedString(testString, bytesBuffer)
-	if err != nil {
-		t.Errorf(err.Error())
-	}
-
-	if n != expectedNumberOfWrittenBytes {
-		t.Errorf("Expected number of written bytes should be \"%d\" and is \"%d\"", expectedNumberOfWrittenBytes, n)
+		n, err := writePaddedString(tt.s, bytesBuffer)
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+		if got, want := n, tt.n; got != want {
+			t.Errorf("%s: Count of bytes written don't match; got = %d, want = %d", tt.s, got, want)
+		}
+		if got, want := bytesBuffer, tt.buf; Equal(got, want) {
+			t.Errorf("%s: Buffers don't match; got = %s, want = %s", tt.s, got.String(), want.String())
+		}
 	}
 }
 
