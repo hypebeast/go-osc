@@ -219,7 +219,8 @@ func TestServerMessageReceiving(t *testing.T) {
 
 		c, err := net.ListenPacket("udp", "localhost:"+strconv.Itoa(port))
 		if err != nil {
-			t.Fatal(err)
+			t.Error(err)
+			return
 		}
 		defer c.Close()
 
@@ -291,19 +292,21 @@ func TestReadTimeout(t *testing.T) {
 
 		select {
 		case <-time.After(5 * time.Second):
-			t.Fatal("timed out")
+			t.Error("timed out")
+			wg.Done()
 		case <-start:
 			client := NewClient("localhost", 6677)
 			msg := NewMessage("/address/test1")
 			err := client.Send(msg)
 			if err != nil {
-				t.Fatal(err)
+				t.Error(err)
 			}
+
 			time.Sleep(150 * time.Millisecond)
 			msg = NewMessage("/address/test2")
 			err = client.Send(msg)
 			if err != nil {
-				t.Fatal(err)
+				t.Error(err)
 			}
 		}
 	}()
@@ -314,10 +317,11 @@ func TestReadTimeout(t *testing.T) {
 		server := &Server{ReadTimeout: 100 * time.Millisecond}
 		c, err := net.ListenPacket("udp", "localhost:6677")
 		if err != nil {
-			t.Fatal(err)
+			t.Error(err)
 		}
 		defer c.Close()
 
+		// Start the client
 		start <- true
 		p, err := server.ReceivePacket(c)
 		if err != nil {
