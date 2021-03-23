@@ -1000,7 +1000,7 @@ func writePaddedString(str string, buf *bytes.Buffer) (int, error) {
 
 	// Always write a null terminator, as we stripped it earlier if it existed
 	buf.WriteByte(0)
-	n += 1
+	n++
 
 	// Calculate the padding bytes needed and create a buffer for the padding bytes
 	numPadBytes := padBytesNeeded(n)
