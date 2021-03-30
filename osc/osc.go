@@ -968,9 +968,9 @@ func writePaddedString(str string, buf *bytes.Buffer) int {
 	// Calculate the padding bytes needed and create a buffer for the padding bytes
 	numPadBytes := padBytesNeeded(n)
 	// Add the padding bytes to the buffer
-	n1, _ := buf.Write(padBytes[:numPadBytes])
+	buf.Write(padBytes[:numPadBytes])
 
-	return n + n1
+	return n + numPadBytes
 }
 
 // padBytesNeeded determines how many bytes are needed to fill up to the next 4
