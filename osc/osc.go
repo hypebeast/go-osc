@@ -223,16 +223,16 @@ func (msg *Message) TypeTags() (string, error) {
 		return "", nil
 	}
 
-	tags := []byte{','}
+	tags := ","
 	for _, m := range msg.Arguments {
 		s, err := GetTypeTag(m)
 		if err != nil {
 			return "", err
 		}
-		tags = append(tags, s...)
+		tags += s
 	}
 
-	return *(*string)(unsafe.Pointer(&tags)), nil
+	return tags, nil
 }
 
 var strBuf []byte
