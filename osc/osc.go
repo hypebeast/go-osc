@@ -913,10 +913,9 @@ func readBlob(buffer *bytes.Buffer) ([]byte, int, error) {
 
 	// Remove the padding bytes
 	numPadBytes := padBytesNeeded(int(blobLen))
-	n += numPadBytes
 	buffer.Next(numPadBytes)
 
-	return blob, n, nil
+	return blob, n + numPadBytes, nil
 }
 
 // writeBlob writes the data byte array as an OSC blob into buff. If the length
