@@ -64,6 +64,7 @@ type Server struct {
 	Addr        string
 	Dispatcher  Dispatcher
 	ReadTimeout time.Duration
+	close       func() error
 }
 
 // Timetag represents an OSC Time Tag.
@@ -516,6 +517,8 @@ var (
 // ListenAndServe retrieves incoming OSC packets and dispatches the retrieved
 // OSC packets.
 func (s *Server) ListenAndServe() error {
+	defer s.CloseConnection()
+
 	if s.Dispatcher == nil {
 		s.Dispatcher = NewStandardDispatcher()
 	}
@@ -524,7 +527,8 @@ func (s *Server) ListenAndServe() error {
 	if err != nil {
 		return err
 	}
-	defer ln.Close()
+
+	s.close = ln.Close
 
 	return s.Serve(ln)
 }
@@ -553,6 +557,18 @@ func (s *Server) Serve(c net.PacketConn) error {
 		tempDelay = 0
 		go s.Dispatcher.Dispatch(msg)
 	}
+}
+
+// CloseConnection forcibly closes a server's connection.
+//
+// This causes a "use of closed network connection" error the next time the
+// server attempts to read from the connection.
+func (s *Server) CloseConnection() error {
+	if s.close == nil {
+		return nil
+	}
+
+	return s.close()
 }
 
 // ReceivePacket listens for incoming OSC packets and returns the packet if one is received.
@@ -959,9 +975,18 @@ func readPaddedString(buffer *bytes.Buffer) (string, int, error) {
 // writePaddedString writes a string with padding bytes to the a buffer.
 // Returns, the number of written bytes and an error if any.
 func writePaddedString(str string, buf *bytes.Buffer) int {
+	// Truncate at the first null, just in case there is more than one present
+	nullIndex := strings.Index(str, "\x00")
+	if nullIndex > 0 {
+		str = str[:nullIndex]
+	}
 	// Write the string to the buffer
 	n, _ := buf.WriteString(str)
 	// Write the null terminator to the buffer as well
+	buf.WriteByte(0)
+	n++
+
+	// Always write a null terminator, as we stripped it earlier if it existed
 	buf.WriteByte(0)
 	n++
 

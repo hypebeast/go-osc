@@ -3,8 +3,11 @@ package osc
 import (
 	"bufio"
 	"bytes"
+	"io"
 	"net"
 	"reflect"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -111,53 +114,83 @@ func TestAddMsgHandlerWithInvalidAddress(t *testing.T) {
 	}
 }
 
+// These tests stop the server by forcibly closing the connection, which causes
+// a "use of closed network connection" error the next time we try to read from
+// the connection. As a workaround, this wraps server.ListenAndServe() in an
+// error-handling layer that doesn't consider "use of closed network connection"
+// an error.
+//
+// Open question: is this desired behavior, or should server.serve return
+// successfully in cases where it would otherwise throw this error?
+func serveUntilInterrupted(server *Server) error {
+	if err := server.ListenAndServe(); err != nil &&
+		!strings.Contains(err.Error(), "use of closed network connection") {
+		return err
+	}
+
+	return nil
+}
+
 func TestServerMessageDispatching(t *testing.T) {
 	finish := make(chan bool)
 	start := make(chan bool)
 	done := sync.WaitGroup{}
 	done.Add(2)
 
-	// Start the OSC server in a new go-routine
-	go func() {
-		conn, err := net.ListenPacket("udp", "localhost:6677")
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer conn.Close()
+	port := 6677
+	addr := "localhost:" + strconv.Itoa(port)
 
-		d := NewStandardDispatcher()
-		err = d.AddMsgHandler("/address/test", func(msg *Message) {
+	d := NewStandardDispatcher()
+	server := &Server{Addr: addr, Dispatcher: d}
+
+	defer func() {
+		if err := server.CloseConnection(); err != nil {
+			t.Error(err)
+		}
+	}()
+
+	if err := d.AddMsgHandler(
+		"/address/test",
+		func(msg *Message) {
 			if len(msg.Arguments) != 1 {
-				t.Error("Argument length should be 1 and is: " + string(len(msg.Arguments)))
+				t.Errorf("Argument length should be 1 and is: %d", len(msg.Arguments))
 			}
 
 			if msg.Arguments[0].(int32) != 1122 {
 				t.Error("Argument should be 1122 and is: " + string(msg.Arguments[0].(int32)))
 			}
 
-			// Stop OSC server
-			conn.Close()
 			finish <- true
-		})
-		if err != nil {
-			t.Error("Error adding message handler")
-		}
+		},
+	); err != nil {
+		t.Error("Error adding message handler")
+	}
 
-		server := &Server{Addr: "localhost:6677", Dispatcher: d}
+	// Server goroutine
+	go func() {
 		start <- true
-		server.Serve(conn)
+
+		if err := serveUntilInterrupted(server); err != nil {
+			t.Errorf("error during Serve: %s", err.Error())
+		}
 	}()
 
+	// Client goroutine
 	go func() {
 		timeout := time.After(5 * time.Second)
 		select {
 		case <-timeout:
 		case <-start:
 			time.Sleep(500 * time.Millisecond)
-			client := NewClient("localhost", 6677)
+			client := NewClient("localhost", port)
 			msg := NewMessage("/address/test")
 			msg.Append(int32(1122))
-			client.Send(msg)
+			if err := client.Send(msg); err != nil {
+				t.Error(err)
+				done.Done()
+				done.Done()
+				return
+			}
 		}
 
 		done.Done()
@@ -173,6 +206,8 @@ func TestServerMessageDispatching(t *testing.T) {
 }
 
 func TestServerMessageReceiving(t *testing.T) {
+	port := 6677
+
 	finish := make(chan bool)
 	start := make(chan bool)
 	done := sync.WaitGroup{}
@@ -181,9 +216,11 @@ func TestServerMessageReceiving(t *testing.T) {
 	// Start the server in a go-routine
 	go func() {
 		server := &Server{}
-		c, err := net.ListenPacket("udp", "localhost:6677")
+
+		c, err := net.ListenPacket("udp", "localhost:"+strconv.Itoa(port))
 		if err != nil {
-			t.Fatal(err)
+			t.Error(err)
+			return
 		}
 		defer c.Close()
 
@@ -192,7 +229,7 @@ func TestServerMessageReceiving(t *testing.T) {
 
 		packet, err := server.ReceivePacket(c)
 		if err != nil {
-			t.Error("Server error")
+			t.Errorf("server error: %v", err)
 			return
 		}
 		if packet == nil {
@@ -220,12 +257,17 @@ func TestServerMessageReceiving(t *testing.T) {
 		select {
 		case <-timeout:
 		case <-start:
-			client := NewClient("localhost", 6677)
+			client := NewClient("localhost", port)
 			msg := NewMessage("/address/test")
 			msg.Append(int32(1122))
 			msg.Append(int32(3344))
 			time.Sleep(500 * time.Millisecond)
-			client.Send(msg)
+			if err := client.Send(msg); err != nil {
+				t.Error(err)
+				done.Done()
+				done.Done()
+				return
+			}
 		}
 
 		done.Done()
@@ -250,19 +292,21 @@ func TestReadTimeout(t *testing.T) {
 
 		select {
 		case <-time.After(5 * time.Second):
-			t.Fatal("timed out")
+			t.Error("timed out")
+			wg.Done()
 		case <-start:
 			client := NewClient("localhost", 6677)
 			msg := NewMessage("/address/test1")
 			err := client.Send(msg)
 			if err != nil {
-				t.Fatal(err)
+				t.Error(err)
 			}
+
 			time.Sleep(150 * time.Millisecond)
 			msg = NewMessage("/address/test2")
 			err = client.Send(msg)
 			if err != nil {
-				t.Fatal(err)
+				t.Error(err)
 			}
 		}
 	}()
@@ -273,10 +317,11 @@ func TestReadTimeout(t *testing.T) {
 		server := &Server{ReadTimeout: 100 * time.Millisecond}
 		c, err := net.ListenPacket("udp", "localhost:6677")
 		if err != nil {
-			t.Fatal(err)
+			t.Error(err)
 		}
 		defer c.Close()
 
+		// Start the client
 		start <- true
 		p, err := server.ReceivePacket(c)
 		if err != nil {
@@ -314,50 +359,79 @@ func TestReadPaddedString(t *testing.T) {
 		buf []byte // buffer
 		n   int    // bytes needed
 		s   string // resulting string
+		e   error  // expected error
 	}{
-		{[]byte{'t', 'e', 's', 't', 's', 't', 'r', 'i', 'n', 'g', 0, 0}, 12, "teststring"},
-		{[]byte{'t', 'e', 's', 't', 0, 0, 0, 0}, 8, "test"},
+		{[]byte{'t', 'e', 's', 't', 'S', 't', 'r', 'i', 'n', 'g', 0, 0}, 12, "testString", nil},
+		{[]byte{'t', 'e', 's', 't', 'e', 'r', 's', 0}, 8, "testers", nil},
+		{[]byte{'t', 'e', 's', 't', 's', 0, 0, 0}, 8, "tests", nil},
+		{[]byte{'t', 'e', 's', 't', 0, 0, 0, 0}, 8, "test", nil},
+		{[]byte{}, 0, "", io.EOF},
+		{[]byte{'t', 'e', 's', 0}, 4, "tes", nil},             // OSC uses null terminated strings
+		{[]byte{'t', 'e', 's', 0, 0, 0, 0, 0}, 4, "tes", nil}, // Additional nulls should be ignored
+		{[]byte{'t', 'e', 's', 0, 0, 0}, 4, "tes", nil},       // Whether or not the nulls fall on a 4 byte padding boundary
+		{[]byte{'t', 'e', 's', 't'}, 0, "", io.EOF},           // if there is no null byte at the end, it doesn't work.
 	} {
 		buf := bytes.NewBuffer(tt.buf)
 		s, n, err := readPaddedString(bufio.NewReader(buf))
-		if err != nil {
-			t.Errorf("%s: Error reading padded string: %s", s, err)
+		if got, want := err, tt.e; got != want {
+			t.Errorf("%q: Unexpected error reading padded string; got = %q, want = %q", tt.s, got, want)
 		}
 		if got, want := n, tt.n; got != want {
-			t.Errorf("%s: Bytes needed don't match; got = %d, want = %d", tt.s, got, want)
+			t.Errorf("%q: Bytes needed don't match; got = %d, want = %d", tt.s, got, want)
 		}
 		if got, want := s, tt.s; got != want {
-			t.Errorf("%s: Strings don't match; got = %s, want = %s", tt.s, got, want)
+			t.Errorf("%q: Strings don't match; got = %q, want = %q", tt.s, got, want)
 		}
 	}
 }
 
 func TestWritePaddedString(t *testing.T) {
-	buf := []byte{}
-	bytesBuffer := bytes.NewBuffer(buf)
-	testString := "testString"
-	expectedNumberOfWrittenBytes := len(testString) + padBytesNeeded(len(testString))
+	for _, tt := range []struct {
+		s   string // string
+		buf []byte // resulting buffer
+		n   int    // bytes expected
+	}{
+		{"testString", []byte{'t', 'e', 's', 't', 'S', 't', 'r', 'i', 'n', 'g', 0, 0}, 12},
+		{"testers", []byte{'t', 'e', 's', 't', 'e', 'r', 's', 0}, 8},
+		{"tests", []byte{'t', 'e', 's', 't', 's', 0, 0, 0}, 8},
+		{"test", []byte{'t', 'e', 's', 't', 0, 0, 0, 0}, 8},
+		{"tes", []byte{'t', 'e', 's', 0}, 4},
+		{"tes\x00", []byte{'t', 'e', 's', 0}, 4},                 // Don't add a second null terminator if one is already present
+		{"tes\x00\x00\x00\x00\x00", []byte{'t', 'e', 's', 0}, 4}, // Skip extra nulls
+		{"tes\x00\x00\x00", []byte{'t', 'e', 's', 0}, 4},         // Even if they don't fall on a 4 byte padding boundary
+		{"", []byte{0, 0, 0, 0}, 4},                              // OSC uses null terminated strings, padded to the 4 byte boundary
+	} {
+		buf := []byte{}
+		bytesBuffer := bytes.NewBuffer(buf)
 
-	n, err := writePaddedString(testString, bytesBuffer)
-	if err != nil {
-		t.Errorf(err.Error())
-	}
-
-	if n != expectedNumberOfWrittenBytes {
-		t.Errorf("Expected number of written bytes should be \"%d\" and is \"%d\"", expectedNumberOfWrittenBytes, n)
+		n, err := writePaddedString(tt.s, bytesBuffer)
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+		if got, want := n, tt.n; got != want {
+			t.Errorf("%q: Count of bytes written don't match; got = %d, want = %d", tt.s, got, want)
+		}
+		if got, want := bytesBuffer, tt.buf; !bytes.Equal(got.Bytes(), want) {
+			t.Errorf("%q: Buffers don't match; got = %q, want = %q", tt.s, got.Bytes(), want)
+		}
 	}
 }
 
 func TestPadBytesNeeded(t *testing.T) {
 	var n int
 	n = padBytesNeeded(4)
-	if n != 4 {
-		t.Errorf("Number of pad bytes should be 4 and is: %d", n)
+	if n != 0 {
+		t.Errorf("Number of pad bytes should be 0 and is: %d", n)
 	}
 
 	n = padBytesNeeded(3)
 	if n != 1 {
 		t.Errorf("Number of pad bytes should be 1 and is: %d", n)
+	}
+
+	n = padBytesNeeded(2)
+	if n != 2 {
+		t.Errorf("Number of pad bytes should be 2 and is: %d", n)
 	}
 
 	n = padBytesNeeded(1)
@@ -366,13 +440,23 @@ func TestPadBytesNeeded(t *testing.T) {
 	}
 
 	n = padBytesNeeded(0)
-	if n != 4 {
-		t.Errorf("Number of pad bytes should be 4 and is: %d", n)
+	if n != 0 {
+		t.Errorf("Number of pad bytes should be 0 and is: %d", n)
+	}
+
+	n = padBytesNeeded(5)
+	if n != 3 {
+		t.Errorf("Number of pad bytes should be 3 and is: %d", n)
+	}
+
+	n = padBytesNeeded(7)
+	if n != 1 {
+		t.Errorf("Number of pad bytes should be 1 and is: %d", n)
 	}
 
 	n = padBytesNeeded(32)
-	if n != 4 {
-		t.Errorf("Number of pad bytes should be 4 and is: %d", n)
+	if n != 0 {
+		t.Errorf("Number of pad bytes should be 0 and is: %d", n)
 	}
 
 	n = padBytesNeeded(63)
