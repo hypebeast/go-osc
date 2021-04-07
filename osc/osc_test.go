@@ -354,6 +354,34 @@ func TestReadTimeout(t *testing.T) {
 	wg.Wait()
 }
 
+func TestReadBlob(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		args    []byte
+		want    []byte
+		want1   int
+		wantErr bool
+	}{
+		{"negative value", []byte{255, 255, 255, 255}, nil, 0, true},
+		{"large value", []byte{0, 1, 17, 112}, nil, 0, true},
+		{"regular value", []byte{0, 0, 0, 1, 10, 0, 0, 0}, []byte{10}, 8, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got, got1, err := readBlob(bufio.NewReader(bytes.NewBuffer(tt.args)))
+			if (err != nil) != tt.wantErr {
+				t.Errorf("readBlob() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("readBlob() got = %v, want %v", got, tt.want)
+			}
+			if got1 != tt.want1 {
+				t.Errorf("readBlob() got1 = %v, want %v", got1, tt.want1)
+			}
+		})
+	}
+}
+
 func TestReadPaddedString(t *testing.T) {
 	for _, tt := range []struct {
 		buf []byte // buffer

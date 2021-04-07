@@ -912,6 +912,10 @@ func readBlob(reader *bufio.Reader) ([]byte, int, error) {
 		return nil, 0, err
 	}
 	n := 4 + int(blobLen)
+	
+	if blobLen < 1 || blobLen > int32(reader.Buffered()) {
+		return nil, 0, fmt.Errorf("readBlob: invalid blob length %d", blobLen)
+	}
 
 	// Read the data
 	blob := make([]byte, blobLen)
