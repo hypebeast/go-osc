@@ -350,7 +350,6 @@ func (msg *Message) MarshalBinary() ([]byte, error) {
 				return nil, err
 			}
 
-		case *Timetag:
 		case Timetag:
 			typetags = append(typetags, 't')
 			timeTag := arg.(Timetag)
@@ -795,7 +794,7 @@ func readArguments(msg *Message, reader *bufio.Reader, start *int) error {
 				return nil
 			}
 			*start += 8
-			msg.Append(NewTimetagFromTimetag(tt))
+			msg.Append(*NewTimetagFromTimetag(tt))
 
 		case 'N': // nil
 			msg.Append(nil)
