@@ -722,6 +722,10 @@ func readArguments(msg *Message, reader *bufio.Reader, start *int) error {
 	}
 	*start += n
 
+	if len(typetags) == 0 {
+		return nil
+	}
+
 	// If the typetag doesn't start with ',', it's not valid
 	if typetags[0] != ',' {
 		return fmt.Errorf("unsupported type tag string %s", typetags)
