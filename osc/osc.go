@@ -721,6 +721,10 @@ func readArguments(msg *Message, reader *bufio.Reader, start *int) error {
 	}
 	*start += n
 
+	if len(typetags) == 0 {
+		return nil
+	}
+
 	// If the typetag doesn't start with ',', it's not valid
 	if typetags[0] != ',' {
 		return fmt.Errorf("unsupported type tag string %s", typetags)
@@ -790,7 +794,7 @@ func readArguments(msg *Message, reader *bufio.Reader, start *int) error {
 				return nil
 			}
 			*start += 8
-			msg.Append(NewTimetagFromTimetag(tt))
+			msg.Append(*NewTimetagFromTimetag(tt))
 
 		case 'N': // nil
 			msg.Append(nil)
@@ -912,6 +916,10 @@ func readBlob(reader *bufio.Reader) ([]byte, int, error) {
 		return nil, 0, err
 	}
 	n := 4 + int(blobLen)
+
+	if blobLen < 1 || blobLen > int32(reader.Buffered()) {
+		return nil, 0, fmt.Errorf("readBlob: invalid blob length %d", blobLen)
+	}
 
 	// Read the data
 	blob := make([]byte, blobLen)
