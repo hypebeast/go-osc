@@ -223,11 +223,12 @@ func TestServerMessageReceiving(t *testing.T) {
 			return
 		}
 		defer c.Close()
+		server.SetConnection(c)
 
 		// Start the client
 		start <- true
 
-		packet, err := server.ReceivePacket(c)
+		packet, err := server.ReceivePacket()
 		if err != nil {
 			t.Errorf("server error: %v", err)
 			return
@@ -320,10 +321,11 @@ func TestReadTimeout(t *testing.T) {
 			t.Error(err)
 		}
 		defer c.Close()
+		server.SetConnection(c)
 
 		// Start the client
 		start <- true
-		p, err := server.ReceivePacket(c)
+		p, err := server.ReceivePacket()
 		if err != nil {
 			t.Errorf("server error: %v", err)
 			return
@@ -334,13 +336,13 @@ func TestReadTimeout(t *testing.T) {
 		}
 
 		// Second receive should time out since client is delayed 150 milliseconds
-		if _, err = server.ReceivePacket(c); err == nil {
+		if _, err = server.ReceivePacket(); err == nil {
 			t.Errorf("expected error")
 			return
 		}
 
 		// Next receive should get it
-		p, err = server.ReceivePacket(c)
+		p, err = server.ReceivePacket()
 		if err != nil {
 			t.Errorf("server error: %v", err)
 			return
@@ -611,6 +613,60 @@ func TestOscMessageMatch(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("%s: msg.Match('%s') = '%t', want = '%t'", tt.desc, tt.addrPattern, got, tt.want)
 		}
+	}
+}
+
+func TestServerSend(t *testing.T) {
+	targetServer := Server{
+		Addr: "127.0.0.1:6677",
+	}
+
+	go func() {
+		d := NewStandardDispatcher()
+		d.AddMsgHandler("/message/test", func(msg *Message) {
+			reply := NewMessage("/reply/test")
+			err := targetServer.SendTo(reply, msg.SenderAddr())
+			if err != nil {
+				t.Errorf("SendTo failed: %v", err)
+			}
+		})
+		targetServer.Dispatcher = d
+		targetServer.ListenAndServe()
+	}()
+
+	time.Sleep(2 * time.Second)
+
+	result := make(chan bool, 1)
+
+	d := NewStandardDispatcher()
+	d.AddMsgHandler("/reply/test", func(msg *Message) {
+		result <- true
+	})
+	clientServer := Server{
+		Addr:       "127.0.0.1:18536",
+		Dispatcher: d,
+	}
+
+	err := clientServer.Listen()
+	if err != nil {
+		t.Errorf("Listen failed: %v", err)
+	}
+	go clientServer.Serve()
+
+	msg := NewMessage("/message/test")
+	addr, _ := net.ResolveUDPAddr("udp", targetServer.Addr)
+	err = clientServer.SendTo(msg, addr)
+	if err != nil {
+		t.Errorf("SendTo failed: %v", err)
+	}
+
+	select {
+	case r := <-result:
+		if !r {
+			t.Error("did not get expected response")
+		}
+	case <-time.After(2 * time.Second):
+		t.Error("unexpected timeout")
 	}
 }
 
