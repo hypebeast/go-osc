@@ -17,6 +17,7 @@ func main() {
 		fmt.Println("Couldn't listen: ", err)
 	}
 	defer conn.Close()
+	server.SetConnection(conn)
 
 	fmt.Println("### Welcome to go-osc receiver demo")
 	fmt.Println("Press \"q\" to exit")
@@ -25,7 +26,7 @@ func main() {
 		fmt.Println("Start listening on", addr)
 
 		for {
-			packet, err := server.ReceivePacket(conn)
+			packet, err := server.ReceivePacket()
 			if err != nil {
 				fmt.Println("Server error: " + err.Error())
 				os.Exit(1)
