@@ -35,15 +35,46 @@ go get github.com/hypebeast/go-osc
 ### Client
 
 ```go
+package main
+
 import "github.com/hypebeast/go-osc/osc"
 
 func main() {
     client := osc.NewClient("localhost", 8765)
+    defer client.Close()
     msg := osc.NewMessage("/osc/address")
     msg.Append(int32(111))
     msg.Append(true)
     msg.Append("hello")
     client.Send(msg)
+}
+```
+
+### Client with response handling
+
+```go
+package main
+
+import "github.com/hypebeast/go-osc/osc"
+
+func main() {
+    finished := make(chan struct{})
+
+    client := osc.NewClient("localhost", 8765)
+    defer client.Close()
+    
+    d := osc.NewStandardDispatcher()
+    d.AddMsgHandler("/reply", func(msg *osc.Message) {
+        osc.PrintMessage(msg)
+        finished <- struct{}{}
+    })
+    client.SetDispatcher(d)
+    go client.ListenAndServe()
+
+    msg := osc.NewMessage("/message/address")
+    client.Send(msg)
+
+    <-finished
 }
 ```
 
@@ -55,13 +86,15 @@ package main
 import "github.com/hypebeast/go-osc/osc"
 
 func main() {
+    var server *osc.Server
     addr := "127.0.0.1:8765"
     d := osc.NewStandardDispatcher()
     d.AddMsgHandler("/message/address", func(msg *osc.Message) {
         osc.PrintMessage(msg)
+        server.SendTo(osc.NewMessage("/reply"), msg.SenderAddr())
     })
 
-    server := &osc.Server{
+    server = &osc.Server{
         Addr: addr,
         Dispatcher:d,
     }

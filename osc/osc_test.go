@@ -3,6 +3,7 @@ package osc
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"io"
 	"net"
 	"reflect"
@@ -656,6 +657,54 @@ func TestServerSend(t *testing.T) {
 	msg := NewMessage("/message/test")
 	addr, _ := net.ResolveUDPAddr("udp", targetServer.Addr)
 	err = clientServer.SendTo(msg, addr)
+	if err != nil {
+		t.Errorf("SendTo failed: %v", err)
+	}
+
+	select {
+	case r := <-result:
+		if !r {
+			t.Error("did not get expected response")
+		}
+	case <-time.After(2 * time.Second):
+		t.Error("unexpected timeout")
+	}
+}
+
+func TestClientRecv(t *testing.T) {
+	targetServer := Server{
+		Addr: "127.0.0.1:6677",
+	}
+
+	go func() {
+		d := NewStandardDispatcher()
+		d.AddMsgHandler("/message/test", func(msg *Message) {
+			fmt.Println("DEBUG: targetServer: got /message/test")
+			reply := NewMessage("/reply/test")
+			err := targetServer.SendTo(reply, msg.SenderAddr())
+			if err != nil {
+				t.Errorf("SendTo failed: %v", err)
+			}
+		})
+		targetServer.Dispatcher = d
+		targetServer.ListenAndServe()
+	}()
+
+	time.Sleep(2 * time.Second)
+
+	result := make(chan bool, 1)
+
+	d := NewStandardDispatcher()
+	d.AddMsgHandler("/reply/test", func(msg *Message) {
+		result <- true
+	})
+
+	client := NewClient("127.0.0.1", 6677)
+	client.SetDispatcher(d)
+	go client.ListenAndServe()
+
+	msg := NewMessage("/message/test")
+	err := client.Send(msg)
 	if err != nil {
 		t.Errorf("SendTo failed: %v", err)
 	}

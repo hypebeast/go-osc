@@ -13,6 +13,7 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -75,9 +76,12 @@ var _ Packet = (*Bundle)(nil)
 // Client enables you to send OSC packets. It sends OSC messages and bundles to
 // the given IP address and port.
 type Client struct {
-	ip    string
-	port  int
-	laddr *net.UDPAddr
+	ip     string
+	port   int
+	laddr  *net.UDPAddr
+	conn   *net.UDPConn
+	server *Server
+	mtx    sync.Mutex
 }
 
 // Server represents an OSC server. The server listens on Address and Port for
@@ -499,7 +503,7 @@ func (b *Bundle) MarshalBinary() ([]byte, error) {
 // specifies the IP address and `port` defines the target port where the
 // messages and bundles will be send to.
 func NewClient(ip string, port int) *Client {
-	return &Client{ip: ip, port: port, laddr: nil}
+	return &Client{ip: ip, port: port, laddr: nil, server: &Server{}}
 }
 
 // IP returns the IP address.
@@ -514,6 +518,24 @@ func (c *Client) Port() int { return c.port }
 // SetPort sets a new port.
 func (c *Client) SetPort(port int) { c.port = port }
 
+// SetConnection sets the connection to use
+func (c *Client) SetConnection(conn *net.UDPConn) {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+	c.server.SetConnection(c.conn)
+	c.conn = conn
+}
+
+// Connection returns the current connection
+func (c *Client) Connection() *net.UDPConn {
+	return c.conn
+}
+
+// SetDispatcher sets the dispatcher to use to handle responses.
+func (c *Client) SetDispatcher(d Dispatcher) {
+	c.server.Dispatcher = d
+}
+
 // SetLocalAddr sets the local address.
 func (c *Client) SetLocalAddr(ip string, port int) error {
 	laddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", ip, port))
@@ -524,27 +546,69 @@ func (c *Client) SetLocalAddr(ip string, port int) error {
 	return nil
 }
 
-// Send sends an OSC Bundle or an OSC Message.
-func (c *Client) Send(packet Packet) error {
+// Connect explicitly connects to the target address. Normally you don't have to call
+// this, as both Send and ListenAndServe establish the connection if necessary.
+func (c *Client) Connect() error {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+	if c.conn != nil {
+		return nil // already connected
+	}
 	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", c.ip, c.port))
 	if err != nil {
 		return err
 	}
-	conn, err := net.DialUDP("udp", c.laddr, addr)
+	c.conn, err = net.DialUDP("udp", c.laddr, addr)
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	c.server.SetConnection(c.conn)
+	fmt.Println("DEBUG: client connected")
+	return nil
+}
 
+// Close closes the current connection.
+func (c *Client) Close() {
+	if c.conn != nil {
+		c.conn.Close()
+		c.conn = nil
+	}
+}
+
+// Send sends an OSC Bundle or an OSC Message. If no connection exists, one will be established.
+func (c *Client) Send(packet Packet) error {
+	if c.conn == nil {
+		err := c.Connect()
+		if err != nil {
+			return err
+		}
+	}
 	data, err := packet.MarshalBinary()
 	if err != nil {
 		return err
 	}
 
-	if _, err = conn.Write(data); err != nil {
+	if _, err = c.conn.Write(data); err != nil {
 		return err
 	}
 	return nil
+}
+
+// ListenAndServe starts the listening and dispatching loop. It listens on the same port, that
+// was established by the client. You only need to call this if you expect responses from the server.
+// This function only returns when there is an error, so better put it into a go routine.
+func (c *Client) ListenAndServe() error {
+	if c.conn == nil {
+		err := c.Connect()
+		if err != nil {
+			return err
+		}
+	}
+	if c.server.Dispatcher == nil {
+		c.server.Dispatcher = NewStandardDispatcher()
+	}
+
+	return c.server.Serve()
 }
 
 ////
