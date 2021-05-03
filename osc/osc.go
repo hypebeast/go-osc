@@ -563,7 +563,6 @@ func (c *Client) Connect() error {
 		return err
 	}
 	c.server.SetConnection(c.conn)
-	fmt.Println("DEBUG: client connected")
 	return nil
 }
 
@@ -695,6 +694,9 @@ func (s *Server) ReceivePacket() (Packet, error) {
 
 // readFromConnection retrieves OSC packets.
 func (s *Server) readFromConnection() (Packet, error) {
+	if s.conn == nil {
+		return nil, errors.New("not connected")
+	}
 	if s.ReadTimeout != 0 {
 		if err := s.conn.SetReadDeadline(time.Now().Add(s.ReadTimeout)); err != nil {
 			return nil, err

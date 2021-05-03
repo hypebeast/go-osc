@@ -673,8 +673,9 @@ func TestServerSend(t *testing.T) {
 
 func TestClientRecv(t *testing.T) {
 	targetServer := Server{
-		Addr: "127.0.0.1:6677",
+		Addr: "127.0.0.1:6678",
 	}
+	defer targetServer.CloseConnection()
 
 	go func() {
 		d := NewStandardDispatcher()
@@ -705,6 +706,7 @@ func TestClientRecv(t *testing.T) {
 
 	msg := NewMessage("/message/test")
 	err := client.Send(msg)
+	defer client.Close()
 	if err != nil {
 		t.Errorf("SendTo failed: %v", err)
 	}
