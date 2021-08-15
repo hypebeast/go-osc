@@ -721,9 +721,13 @@ func readArguments(msg *Message, reader *bufio.Reader, start *int) error {
 	}
 	*start += n
 
+	if len(typetags) == 0 {
+		return nil
+	}
+
 	// If the typetag doesn't start with ',', it's not valid
 	if typetags[0] != ',' {
-		return errors.New("unsupported type tag string")
+		return fmt.Errorf("unsupported type tag string %s", typetags)
 	}
 
 	// Remove ',' from the type tag
@@ -790,7 +794,7 @@ func readArguments(msg *Message, reader *bufio.Reader, start *int) error {
 				return nil
 			}
 			*start += 8
-			msg.Append(NewTimetagFromTimetag(tt))
+			msg.Append(*NewTimetagFromTimetag(tt))
 
 		case 'N': // nil
 			msg.Append(nil)
@@ -913,6 +917,10 @@ func readBlob(reader *bufio.Reader) ([]byte, int, error) {
 	}
 	n := 4 + int(blobLen)
 
+	if blobLen < 1 || blobLen > int32(reader.Buffered()) {
+		return nil, 0, fmt.Errorf("readBlob: invalid blob length %d", blobLen)
+	}
+
 	// Read the data
 	blob := make([]byte, blobLen)
 	if _, err := reader.Read(blob); err != nil {
@@ -970,12 +978,8 @@ func readPaddedString(reader *bufio.Reader) (string, int, error) {
 	}
 	n := len(str)
 
-	// Remove the string delimiter, in order to calculate the right amount
-	// of padding bytes
-	str = str[:len(str)-1]
-
-	// Remove the padding bytes
-	padLen := padBytesNeeded(len(str)) - 1
+	// Remove the padding bytes (leaving the null delimiter)
+	padLen := padBytesNeeded(len(str))
 	if padLen > 0 {
 		n += padLen
 		padBytes := make([]byte, padLen)
@@ -984,20 +988,30 @@ func readPaddedString(reader *bufio.Reader) (string, int, error) {
 		}
 	}
 
-	return str, n, nil
+	// Strip off the string delimiter
+	return str[:len(str)-1], n, nil
 }
 
 // writePaddedString writes a string with padding bytes to the a buffer.
 // Returns, the number of written bytes and an error if any.
 func writePaddedString(str string, buf *bytes.Buffer) (int, error) {
+	// Truncate at the first null, just in case there is more than one present
+	nullIndex := strings.Index(str, "\x00")
+	if nullIndex > 0 {
+		str = str[:nullIndex]
+	}
 	// Write the string to the buffer
 	n, err := buf.WriteString(str)
 	if err != nil {
 		return 0, err
 	}
 
+	// Always write a null terminator, as we stripped it earlier if it existed
+	buf.WriteByte(0)
+	n++
+
 	// Calculate the padding bytes needed and create a buffer for the padding bytes
-	numPadBytes := padBytesNeeded(len(str))
+	numPadBytes := padBytesNeeded(n)
 	if numPadBytes > 0 {
 		padBytes := make([]byte, numPadBytes)
 		// Add the padding bytes to the buffer
@@ -1014,7 +1028,7 @@ func writePaddedString(str string, buf *bytes.Buffer) (int, error) {
 // padBytesNeeded determines how many bytes are needed to fill up to the next 4
 // byte length.
 func padBytesNeeded(elementLen int) int {
-	return 4*(elementLen/4+1) - elementLen
+	return ((4 - (elementLen % 4)) % 4)
 }
 
 ////
