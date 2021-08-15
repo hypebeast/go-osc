@@ -581,7 +581,16 @@ func (s *Server) CloseConnection() error {
 		return nil
 	}
 
-	return s.close()
+	err := s.close()
+	// If we get "use of closed network connection", it's not a problem because
+	// closing the network connection is exactly what we wanted to do!
+	if err != nil && !strings.Contains(
+		err.Error(), "use of closed network connection",
+	) {
+		return err
+	}
+
+	return nil
 }
 
 // ReceivePacket listens for incoming OSC packets and returns the packet if one is received.
