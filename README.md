@@ -3,7 +3,7 @@
 [![Build Status](https://travis-ci.org/hypebeast/go-osc.png?branch=master)](https://travis-ci.org/hypebeast/go-osc) [![GoDoc](https://godoc.org/github.com/hypebeast/go-osc/osc?status.svg)](https://godoc.org/github.com/hypebeast/go-osc/osc) [![Coverage Status](https://coveralls.io/repos/github/hypebeast/go-osc/badge.svg?branch=master)](https://coveralls.io/github/hypebeast/go-osc?branch=master)
 [![Go Report Card](https://goreportcard.com/badge/github.com/hypebeast/go-osc)](https://goreportcard.com/report/github.com/hypebeast/go-osc)
 
-[Open Sound Control (OSC)](http://opensoundcontrol.org/introduction-osc) library for Golang. Implemented in pure Go.
+[Open Sound Control (OSC)](http://opensoundcontrol.org) library for Golang. Implemented in pure Go.
 
 ## Features
 
