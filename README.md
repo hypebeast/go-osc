@@ -1,28 +1,28 @@
 # GoOSC
 
-[![Build Status](https://travis-ci.org/hypebeast/go-osc.png?branch=master)](https://travis-ci.org/hypebeast/go-osc) [![GoDoc](https://godoc.org/github.com/hypebeast/go-osc/osc?status.svg)](https://godoc.org/github.com/hypebeast/go-osc/osc) [![Coverage Status](https://coveralls.io/repos/github/hypebeast/go-osc/badge.svg?branch=master)](https://coveralls.io/github/hypebeast/go-osc?branch=master)
+![Build](https://github.com/hypebeast/go-osc/actions/workflows/test.yml/badge.svg) [![GoDoc](https://godoc.org/github.com/hypebeast/go-osc/osc?status.svg)](https://godoc.org/github.com/hypebeast/go-osc/osc) [![Coverage Status](https://coveralls.io/repos/github/hypebeast/go-osc/badge.svg?branch=master)](https://coveralls.io/github/hypebeast/go-osc?branch=master)
 [![Go Report Card](https://goreportcard.com/badge/github.com/hypebeast/go-osc)](https://goreportcard.com/report/github.com/hypebeast/go-osc)
 
 [Open Sound Control (OSC)](http://opensoundcontrol.org) library for Golang. Implemented in pure Go.
 
 ## Features
 
-- OSC Bundles, including timetags
-- OSC Messages
-- OSC Client
-- OSC Server
-- Supports the following OSC argument types:
-  - 'i' (Int32)
-  - 'f' (Float32)
-  - 's' (string)
-  - 'b' (blob / binary data)
-  - 'h' (Int64)
-  - 't' (OSC timetag)
-  - 'd' (Double/int64)
-  - 'T' (True)
-  - 'F' (False)
-  - 'N' (Nil)
-- Support for OSC address pattern including '\*', '?', '{,}' and '[]' wildcards
+-   OSC Bundles, including timetags
+-   OSC Messages
+-   OSC Client
+-   OSC Server
+-   Supports the following OSC argument types:
+    -   'i' (Int32)
+    -   'f' (Float32)
+    -   's' (string)
+    -   'b' (blob / binary data)
+    -   'h' (Int64)
+    -   't' (OSC timetag)
+    -   'd' (Double/int64)
+    -   'T' (True)
+    -   'F' (False)
+    -   'N' (Nil)
+-   Support for OSC address pattern including '\*', '?', '{,}' and '[]' wildcards
 
 ## Install
 
