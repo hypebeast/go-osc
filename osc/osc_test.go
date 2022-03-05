@@ -314,7 +314,7 @@ func TestReadTimeout(t *testing.T) {
 	go func() {
 		defer wg.Done()
 
-		server := &Server{ReadTimeout: 100 * time.Millisecond}
+		server := &Server{ReadTimeout: 300 * time.Millisecond}
 		c, err := net.ListenPacket("udp", "localhost:6677")
 		if err != nil {
 			t.Error(err)
