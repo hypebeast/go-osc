@@ -18,7 +18,7 @@ jobs:
           go get -u golang.org/x/lint/golint
       - name: Run vet & lint
         run: |
-          go vet .
-          golint .
+          go vet ./osc
+          golint ./osc
       - name: Run tests
-        run: go test ./...
+        run: go test ./osc
