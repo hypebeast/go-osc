@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"io"
+	"math/rand"
 	"net"
 	"reflect"
 	"strconv"
@@ -131,7 +132,7 @@ func serveUntilInterrupted(server *Server) error {
 	return nil
 }
 
-func TestServerMessageDispatching(t *testing.T) {
+func testServerMessageDispatching(t *testing.T, stringArgument string) {
 	finish := make(chan bool)
 	start := make(chan bool)
 	done := sync.WaitGroup{}
@@ -152,15 +153,32 @@ func TestServerMessageDispatching(t *testing.T) {
 	if err := d.AddMsgHandler(
 		"/address/test",
 		func(msg *Message) {
-			if len(msg.Arguments) != 1 {
-				t.Errorf("Argument length should be 1 and is: %d", len(msg.Arguments))
+			defer func() {
+				server.CloseConnection()
+				finish <- true
+			}()
+
+			if len(msg.Arguments) != 2 {
+				t.Errorf("Argument length should be 2 and is: %d", len(msg.Arguments))
 			}
 
 			if msg.Arguments[0].(int32) != 1122 {
 				t.Error("Argument should be 1122 and is: " + string(msg.Arguments[0].(int32)))
 			}
 
-			finish <- true
+			receivedString := msg.Arguments[1].(string)
+
+			if len(receivedString) != len(stringArgument) {
+				t.Errorf(
+					"String argument length should be %d and is %d",
+					len(stringArgument),
+					len(receivedString),
+				)
+			} else if receivedString != stringArgument {
+				t.Errorf(
+					"Argument should be %s and is: %s", stringArgument, receivedString,
+				)
+			}
 		},
 	); err != nil {
 		t.Error("Error adding message handler")
@@ -185,6 +203,7 @@ func TestServerMessageDispatching(t *testing.T) {
 			client := NewClient("localhost", port)
 			msg := NewMessage("/address/test")
 			msg.Append(int32(1122))
+			msg.Append(stringArgument)
 			if err := client.Send(msg); err != nil {
 				t.Error(err)
 				done.Done()
@@ -205,7 +224,21 @@ func TestServerMessageDispatching(t *testing.T) {
 	done.Wait()
 }
 
-func TestServerMessageReceiving(t *testing.T) {
+func TestServerMessageDispatchingUDP(t *testing.T) {
+	// Attempting to send a message larger than this (the exact threshold depends
+	// on your OS, etc.) results in an error like:
+	//
+	//   write udp 127.0.0.1:52496->127.0.0.1:6677: write: message too long
+	//
+	// This is expected for UDP. The practical guaranteed packet size limit for
+	// UDP is 576 bytes, and some of that is taken up by protocol overhead.
+	//
+	// Reference:
+	// https://forum.juce.com/t/osc-blobs-are-lost-above-certain-size/20241/2
+	testServerMessageDispatching(t, randomString(500))
+}
+
+func testServerMessageReceiving(t *testing.T, stringArgument string) {
 	port := 6677
 
 	finish := make(chan bool)
@@ -238,14 +271,27 @@ func TestServerMessageReceiving(t *testing.T) {
 		}
 
 		msg := packet.(*Message)
-		if msg.CountArguments() != 2 {
-			t.Errorf("Argument length should be 2 and is: %d\n", msg.CountArguments())
+		if msg.CountArguments() != 3 {
+			t.Errorf("Argument length should be 3 and is: %d\n", msg.CountArguments())
 		}
 		if msg.Arguments[0].(int32) != 1122 {
 			t.Error("Argument should be 1122 and is: " + string(msg.Arguments[0].(int32)))
 		}
 		if msg.Arguments[1].(int32) != 3344 {
 			t.Error("Argument should be 3344 and is: " + string(msg.Arguments[1].(int32)))
+		}
+
+		receivedString := msg.Arguments[2].(string)
+		if len(receivedString) != len(stringArgument) {
+			t.Errorf(
+				"String argument length should be %d and is %d",
+				len(stringArgument),
+				len(receivedString),
+			)
+		} else if receivedString != stringArgument {
+			t.Errorf(
+				"Argument should be %s and is: %s", stringArgument, receivedString,
+			)
 		}
 
 		c.Close()
@@ -261,6 +307,7 @@ func TestServerMessageReceiving(t *testing.T) {
 			msg := NewMessage("/address/test")
 			msg.Append(int32(1122))
 			msg.Append(int32(3344))
+			msg.Append(stringArgument)
 			time.Sleep(500 * time.Millisecond)
 			if err := client.Send(msg); err != nil {
 				t.Error(err)
@@ -280,6 +327,32 @@ func TestServerMessageReceiving(t *testing.T) {
 	}()
 
 	done.Wait()
+}
+
+// source: https://www.calhoun.io/creating-random-strings-in-go/
+func randomString(length int) string {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	var seededRand = rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	b := make([]byte, length)
+	for i := range b {
+		b[i] = charset[seededRand.Intn(len(charset))]
+	}
+	return string(b)
+}
+
+func TestServerMessageReceivingUDP(t *testing.T) {
+	// Attempting to send a message larger than this (the exact threshold depends
+	// on your OS, etc.) results in an error like:
+	//
+	//   write udp 127.0.0.1:52496->127.0.0.1:6677: write: message too long
+	//
+	// This is expected for UDP. The practical guaranteed packet size limit for
+	// UDP is 576 bytes, and some of that is taken up by protocol overhead.
+	//
+	// Reference:
+	// https://forum.juce.com/t/osc-blobs-are-lost-above-certain-size/20241/2
+	testServerMessageReceiving(t, randomString(500))
 }
 
 func TestReadTimeout(t *testing.T) {
