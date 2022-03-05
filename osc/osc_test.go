@@ -302,7 +302,7 @@ func TestReadTimeout(t *testing.T) {
 				t.Error(err)
 			}
 
-			time.Sleep(150 * time.Millisecond)
+			time.Sleep(500 * time.Millisecond)
 			msg = NewMessage("/address/test2")
 			err = client.Send(msg)
 			if err != nil {
