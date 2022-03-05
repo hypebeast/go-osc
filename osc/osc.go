@@ -13,6 +13,7 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -24,13 +25,20 @@ const (
 // Packet is the interface for Message and Bundle.
 type Packet interface {
 	encoding.BinaryMarshaler
+	SenderAddr() net.Addr
 }
 
 // Message represents a single OSC message. An OSC message consists of an OSC
 // address pattern and zero or more arguments.
 type Message struct {
-	Address   string
-	Arguments []interface{}
+	Address    string
+	Arguments  []interface{}
+	senderAddr net.Addr
+}
+
+// SenderAddr returns the sender address of this message. Returns nil if no address is available
+func (m *Message) SenderAddr() net.Addr {
+	return m.senderAddr
 }
 
 // Verify that Messages implements the Packet interface.
@@ -41,9 +49,25 @@ var _ Packet = (*Message)(nil)
 // elements. The OSC-timetag is a 64-bit fixed point time tag. See
 // http://opensoundcontrol.org/spec-1_0 for more information.
 type Bundle struct {
-	Timetag  Timetag
-	Messages []*Message
-	Bundles  []*Bundle
+	Timetag    Timetag
+	Messages   []*Message
+	Bundles    []*Bundle
+	senderAddr net.Addr
+}
+
+// SenderAddr returns the sender address of this message. Returns nil if no address is available
+func (b *Bundle) SenderAddr() net.Addr {
+	return b.senderAddr
+}
+
+func (b *Bundle) setSenderAddr(src net.Addr) {
+	b.senderAddr = src
+	for _, m := range b.Messages {
+		m.senderAddr = src
+	}
+	for _, b := range b.Bundles {
+		b.setSenderAddr(src)
+	}
 }
 
 // Verify that Bundle implements the Packet interface.
@@ -52,9 +76,12 @@ var _ Packet = (*Bundle)(nil)
 // Client enables you to send OSC packets. It sends OSC messages and bundles to
 // the given IP address and port.
 type Client struct {
-	ip    string
-	port  int
-	laddr *net.UDPAddr
+	ip     string
+	port   int
+	laddr  *net.UDPAddr
+	conn   *net.UDPConn
+	server *Server
+	mtx    sync.Mutex
 }
 
 // Server represents an OSC server. The server listens on Address and Port for
@@ -63,6 +90,7 @@ type Server struct {
 	Addr        string
 	Dispatcher  Dispatcher
 	ReadTimeout time.Duration
+	conn        net.PacketConn
 	close       func() error
 }
 
@@ -475,7 +503,7 @@ func (b *Bundle) MarshalBinary() ([]byte, error) {
 // specifies the IP address and `port` defines the target port where the
 // messages and bundles will be send to.
 func NewClient(ip string, port int) *Client {
-	return &Client{ip: ip, port: port, laddr: nil}
+	return &Client{ip: ip, port: port, laddr: nil, server: &Server{}}
 }
 
 // IP returns the IP address.
@@ -490,6 +518,24 @@ func (c *Client) Port() int { return c.port }
 // SetPort sets a new port.
 func (c *Client) SetPort(port int) { c.port = port }
 
+// SetConnection sets the connection to use
+func (c *Client) SetConnection(conn *net.UDPConn) {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+	c.server.SetConnection(c.conn)
+	c.conn = conn
+}
+
+// Connection returns the current connection
+func (c *Client) Connection() *net.UDPConn {
+	return c.conn
+}
+
+// SetDispatcher sets the dispatcher to use to handle responses.
+func (c *Client) SetDispatcher(d Dispatcher) {
+	c.server.Dispatcher = d
+}
+
 // SetLocalAddr sets the local address.
 func (c *Client) SetLocalAddr(ip string, port int) error {
 	laddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", ip, port))
@@ -500,27 +546,68 @@ func (c *Client) SetLocalAddr(ip string, port int) error {
 	return nil
 }
 
-// Send sends an OSC Bundle or an OSC Message.
-func (c *Client) Send(packet Packet) error {
+// Connect explicitly connects to the target address. Normally you don't have to call
+// this, as both Send and ListenAndServe establish the connection if necessary.
+func (c *Client) Connect() error {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+	if c.conn != nil {
+		return nil // already connected
+	}
 	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", c.ip, c.port))
 	if err != nil {
 		return err
 	}
-	conn, err := net.DialUDP("udp", c.laddr, addr)
+	c.conn, err = net.DialUDP("udp", c.laddr, addr)
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	c.server.SetConnection(c.conn)
+	return nil
+}
 
+// Close closes the current connection.
+func (c *Client) Close() {
+	if c.conn != nil {
+		c.conn.Close()
+		c.conn = nil
+	}
+}
+
+// Send sends an OSC Bundle or an OSC Message. If no connection exists, one will be established.
+func (c *Client) Send(packet Packet) error {
+	if c.conn == nil {
+		err := c.Connect()
+		if err != nil {
+			return err
+		}
+	}
 	data, err := packet.MarshalBinary()
 	if err != nil {
 		return err
 	}
 
-	if _, err = conn.Write(data); err != nil {
+	if _, err = c.conn.Write(data); err != nil {
 		return err
 	}
 	return nil
+}
+
+// ListenAndServe starts the listening and dispatching loop. It listens on the same port, that
+// was established by the client. You only need to call this if you expect responses from the server.
+// This function only returns when there is an error, so better put it into a go routine.
+func (c *Client) ListenAndServe() error {
+	if c.conn == nil {
+		err := c.Connect()
+		if err != nil {
+			return err
+		}
+	}
+	if c.server.Dispatcher == nil {
+		c.server.Dispatcher = NewStandardDispatcher()
+	}
+
+	return c.server.Serve()
 }
 
 ////
@@ -536,22 +623,37 @@ func (s *Server) ListenAndServe() error {
 		s.Dispatcher = NewStandardDispatcher()
 	}
 
+	if s.conn == nil {
+		s.Listen()
+	}
+
+	return s.Serve()
+}
+
+// Listen creates the listening port and sets up the connection.
+func (s *Server) Listen() error {
 	ln, err := net.ListenPacket("udp", s.Addr)
 	if err != nil {
 		return err
 	}
+	s.conn = ln
 
 	s.close = ln.Close
+	return nil
+}
 
-	return s.Serve(ln)
+// SetConnection sets the connection to use for the server. This is for a case
+// where you created the connection manually instead of using ListenAndServer.
+func (s *Server) SetConnection(c net.PacketConn) {
+	s.conn = c
 }
 
 // Serve retrieves incoming OSC packets from the given connection and dispatches
 // retrieved OSC packets. If something goes wrong an error is returned.
-func (s *Server) Serve(c net.PacketConn) error {
+func (s *Server) Serve() error {
 	var tempDelay time.Duration
 	for {
-		msg, err := s.readFromConnection(c)
+		msg, err := s.readFromConnection()
 		if err != nil {
 			if ne, ok := err.(net.Error); ok && ne.Temporary() {
 				if tempDelay == 0 {
@@ -568,6 +670,7 @@ func (s *Server) Serve(c net.PacketConn) error {
 			return err
 		}
 		tempDelay = 0
+
 		go s.Dispatcher.Dispatch(msg)
 	}
 }
@@ -594,36 +697,53 @@ func (s *Server) CloseConnection() error {
 }
 
 // ReceivePacket listens for incoming OSC packets and returns the packet if one is received.
-func (s *Server) ReceivePacket(c net.PacketConn) (Packet, error) {
-	return s.readFromConnection(c)
+func (s *Server) ReceivePacket() (Packet, error) {
+	return s.readFromConnection()
 }
 
 // readFromConnection retrieves OSC packets.
-func (s *Server) readFromConnection(c net.PacketConn) (Packet, error) {
+func (s *Server) readFromConnection() (Packet, error) {
+	if s.conn == nil {
+		return nil, errors.New("not connected")
+	}
 	if s.ReadTimeout != 0 {
-		if err := c.SetReadDeadline(time.Now().Add(s.ReadTimeout)); err != nil {
+		if err := s.conn.SetReadDeadline(time.Now().Add(s.ReadTimeout)); err != nil {
 			return nil, err
 		}
 	}
 
 	data := make([]byte, 65535)
-	n, _, err := c.ReadFrom(data)
+	n, src, err := s.conn.ReadFrom(data)
 	if err != nil {
 		return nil, err
 	}
 
 	var start int
-	p, err := readPacket(bufio.NewReader(bytes.NewBuffer(data)), &start, n)
+	p, err := readPacket(bufio.NewReader(bytes.NewBuffer(data)), &start, n, src)
 	if err != nil {
 		return nil, err
 	}
 	return p, nil
 }
 
+// SendTo sends a message to the given address. The sender address will be the address and
+// port the server is listening on.
+func (s *Server) SendTo(packet Packet, addr net.Addr) error {
+	data, err := packet.MarshalBinary()
+	if err != nil {
+		return err
+	}
+
+	if _, err = s.conn.WriteTo(data, addr); err != nil {
+		return err
+	}
+	return nil
+}
+
 // ParsePacket parses the given msg string and returns a Packet
 func ParsePacket(msg string) (Packet, error) {
 	var start int
-	p, err := readPacket(bufio.NewReader(bytes.NewBufferString(msg)), &start, len(msg))
+	p, err := readPacket(bufio.NewReader(bytes.NewBufferString(msg)), &start, len(msg), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -631,7 +751,7 @@ func ParsePacket(msg string) (Packet, error) {
 }
 
 // receivePacket receives an OSC packet from the given reader.
-func readPacket(reader *bufio.Reader, start *int, end int) (Packet, error) {
+func readPacket(reader *bufio.Reader, start *int, end int, src net.Addr) (Packet, error) {
 	//var buf []byte
 	buf, err := reader.Peek(1)
 	if err != nil {
@@ -644,6 +764,7 @@ func readPacket(reader *bufio.Reader, start *int, end int) (Packet, error) {
 		if err != nil {
 			return nil, err
 		}
+		packet.senderAddr = src
 		return packet, nil
 	}
 	if buf[0] == '#' { // An OSC bundle starts with a '#'
@@ -651,6 +772,8 @@ func readPacket(reader *bufio.Reader, start *int, end int) (Packet, error) {
 		if err != nil {
 			return nil, err
 		}
+		packet.setSenderAddr(src)
+
 		return packet, nil
 	}
 
@@ -690,7 +813,7 @@ func readBundle(reader *bufio.Reader, start *int, end int) (*Bundle, error) {
 		}
 		*start += 4
 
-		p, err := readPacket(reader, start, end)
+		p, err := readPacket(reader, start, end, nil)
 		if err != nil {
 			return nil, err
 		}
