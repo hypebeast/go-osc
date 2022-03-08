@@ -1,6 +1,6 @@
 PKG = ./osc
 
-all: format coverage
+all: format vet lint coverage
 
 help:
 	@echo "Usage make [TARGET]"

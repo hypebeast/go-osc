@@ -687,6 +687,68 @@ func TestOscMessageMatch(t *testing.T) {
 	}
 }
 
+func TestTimetoTimetag(t *testing.T) {
+	tc := []struct {
+		desc  string
+		input time.Time
+		want  uint64
+	}{
+		{
+			"return zero time instance when timetag = 1",
+			time.Time{},
+			1,
+		},
+		{
+			"calculate correct timetag without parts of second",
+			time.Unix(1646694561, 0),
+			16560033939226361856,
+		},
+		{
+			"calculate correct timetag with parts of second",
+			time.Unix(1646694561, 500),
+			16560033939226364003,
+		},
+	}
+
+	for _, tt := range tc {
+		got := timeToTimetag(tt.input)
+		if got != tt.want {
+			t.Errorf("%s: timeToTimetag: '%d', want = '%d'", tt.desc, got, tt.want)
+		}
+	}
+}
+
+func TestTimetagToTime(t *testing.T) {
+	tc := []struct {
+		desc  string
+		input uint64
+		want  time.Time
+	}{
+		{
+			"return zero time instance when timetag = 1",
+			1,
+			time.Time{},
+		},
+		{
+			"calculate correct timetag without parts of second",
+			16560033939226361856,
+			time.Unix(1646694561, 0),
+		},
+		{
+			"calculate correct timetag with parts of second",
+			16560033939226364004,
+			time.Unix(1646694561, 500),
+		},
+	}
+
+	for _, tt := range tc {
+		got := timetagToTime(tt.input)
+		if got != tt.want {
+			t.Errorf("%s: timetagToTime: '%v', want = '%v'", tt.desc, got, tt.want)
+		}
+	}
+}
+
 const zero = string(byte(0))
 
 // nulls returns a string of `i` nulls.
