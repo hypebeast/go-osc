@@ -17,8 +17,9 @@ import (
 )
 
 const (
-	secondsFrom1900To1970 = 2208988800
-	bundleTagString       = "#bundle"
+	secondsFrom1900To1970  = 2208988800                      // Source: RFC 868
+	nanosecondsPerFraction = float64(0.23283064365386962891) // 1e9/(2^32)
+	bundleTagString        = "#bundle"
 )
 
 // Packet is the interface for Message and Bundle.
@@ -212,10 +213,7 @@ func (msg *Message) ClearData() {
 // address. The match is case sensitive!
 func (msg *Message) Match(addr string) bool {
 	exp := getRegEx(msg.Address)
-	if exp.MatchString(addr) {
-		return true
-	}
-	return false
+	return exp.MatchString(addr)
 }
 
 // TypeTags returns the type tag string.
@@ -305,7 +303,7 @@ func (msg *Message) MarshalBinary() ([]byte, error) {
 			return nil, fmt.Errorf("OSC - unsupported type: %T", t)
 
 		case bool:
-			if arg.(bool) == true {
+			if arg.(bool) {
 				typetags = append(typetags, 'T')
 			} else {
 				typetags = append(typetags, 'F')
@@ -612,7 +610,7 @@ func (s *Server) readFromConnection(c net.PacketConn) (Packet, error) {
 		return nil, err
 	}
 
-    p, err := readPacket(bufio.NewReader(bytes.NewBuffer(data[0:n])))
+	p, err := readPacket(bufio.NewReader(bytes.NewBuffer(data[0:n])))
 	if err != nil {
 		return nil, err
 	}
@@ -665,7 +663,7 @@ func readBundle(reader *bufio.Reader) (*Bundle, error) {
 	}
 
 	if startTag != bundleTagString {
-		return nil, fmt.Errorf("Invalid bundle start tag: %s", startTag)
+		return nil, fmt.Errorf("invalid bundle start tag: %s", startTag)
 	}
 
 	// Read the timetag
@@ -808,10 +806,10 @@ func readArguments(msg *Message, reader *bufio.Reader) error {
 ////
 
 // NewTimetag returns a new OSC time tag object.
-func NewTimetag(timeStamp time.Time) *Timetag {
+func NewTimetag(ts time.Time) *Timetag {
 	return &Timetag{
-		time:     timeStamp,
-		timeTag:  timeToTimetag(timeStamp),
+		time:     ts,
+		timeTag:  timeToTimetag(ts),
 		MinValue: uint64(1)}
 }
 
@@ -862,13 +860,16 @@ func (t *Timetag) SetTime(time time.Time) {
 // same as the value of the time tag. It returns zero if the value of the
 // time tag is in the past.
 func (t *Timetag) ExpiresIn() time.Duration {
+	// If the timetag is one the OSC method must be invoke immediately.
+	// See https://ccrma.stanford.edu/groups/osc/spec-1_0.html#timetags.
 	if t.timeTag <= 1 {
 		return 0
 	}
 
 	tt := timetagToTime(t.timeTag)
-	seconds := tt.Sub(time.Now())
+	seconds := time.Until(tt)
 
+	// Invoke the OSC method immediately if the timetag is before or equal to the current time
 	if seconds <= 0 {
 		return 0
 	}
@@ -886,14 +887,37 @@ func (t *Timetag) ExpiresIn() time.Duration {
 //
 // The time tag value consisting of 63 zero bits followed by a one in the least
 // significant bit is a special case meaning "immediately."
-func timeToTimetag(time time.Time) (timetag uint64) {
-	timetag = uint64((secondsFrom1900To1970 + time.Unix()) << 32)
-	return (timetag + uint64(uint32(time.Nanosecond())))
+//
+// See also https://ccrma.stanford.edu/groups/osc/spec-1_0.html#timetags.
+func timeToTimetag(v time.Time) (timetag uint64) {
+	if v.IsZero() {
+		// Means "immediately". It cannot occur otherwise as timetag == 0 gets
+		// converted to January 1, 1900 while time.Time{} means year 1 in Go.
+		// Use the IsZero method to detect it.
+		return 1
+	}
+
+	seconds := uint64(v.Unix() + secondsFrom1900To1970)
+	secondFraction := float64(v.Nanosecond()) / nanosecondsPerFraction
+
+	return (seconds << 32) + uint64(uint32(secondFraction))
 }
 
-// timetagToTime converts the given timetag to a time object.
+// timetagToTime converts the given OSC timetag to a time object.
 func timetagToTime(timetag uint64) (t time.Time) {
-	return time.Unix(int64((timetag>>32)-secondsFrom1900To1970), int64(timetag&0xffffffff))
+	// Special case when timetag is == 1 that means "immediately". In this case we return
+	// the zero time instant.
+	if timetag == 1 {
+		return time.Time{}
+	}
+
+	seconds := int64(timetag>>32) - secondsFrom1900To1970
+	nanoseconds := int64(nanosecondsPerFraction * float64(float64(timetag&(1<<32-1))))
+
+	return time.Unix(
+		seconds,
+		nanoseconds,
+	)
 }
 
 ////
@@ -1089,6 +1113,6 @@ func getTypeTag(arg interface{}) (string, error) {
 	case Timetag:
 		return "t", nil
 	default:
-		return "", fmt.Errorf("Unsupported type: %T", t)
+		return "", fmt.Errorf("unsupported type: %T", t)
 	}
 }
