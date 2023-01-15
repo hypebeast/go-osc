@@ -9,9 +9,11 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -21,6 +23,28 @@ const (
 	nanosecondsPerFraction = float64(0.23283064365386962891) // 1e9/(2^32)
 	bundleTagString        = "#bundle"
 )
+
+// NetworkProtocol represents a network protocol that can be used to transport
+// OSC messages.
+type NetworkProtocol int
+
+const (
+	// UDP represents the UDP network protocol.
+	UDP NetworkProtocol = iota
+	// TCP represents the TCP network protocol.
+	TCP
+)
+
+func (protocol NetworkProtocol) String() string {
+	switch protocol {
+	case UDP:
+		return "UDP"
+	case TCP:
+		return "TCP"
+	default:
+		return strconv.Itoa(int(protocol))
+	}
+}
 
 // Packet is the interface for Message and Bundle.
 type Packet interface {
@@ -53,18 +77,21 @@ var _ Packet = (*Bundle)(nil)
 // Client enables you to send OSC packets. It sends OSC messages and bundles to
 // the given IP address and port.
 type Client struct {
-	ip    string
-	port  int
-	laddr *net.UDPAddr
+	ip              string
+	port            int
+	networkProtocol NetworkProtocol
+	sendBytes       SendFunc
+	localAddrString string
 }
 
 // Server represents an OSC server. The server listens on Address and Port for
 // incoming OSC packets and bundles.
 type Server struct {
-	Addr        string
-	Dispatcher  Dispatcher
-	ReadTimeout time.Duration
-	close       func() error
+	Addr            string
+	Dispatcher      Dispatcher
+	ReadTimeout     time.Duration
+	networkProtocol NetworkProtocol
+	close           func() error
 }
 
 // Timetag represents an OSC Time Tag.
@@ -264,9 +291,9 @@ func (msg *Message) String() string {
 			formatString += " %s"
 			args = append(args, "blob")
 
-		case Timetag:
+		case *Timetag:
 			formatString += " %d"
-			timeTag := arg.(Timetag)
+			timeTag := arg.(*Timetag)
 			args = append(args, timeTag.TimeTag())
 		}
 	}
@@ -468,12 +495,35 @@ func (b *Bundle) MarshalBinary() ([]byte, error) {
 // Client
 ////
 
+// ClientOption is a function that customizes a Client instance.
+type ClientOption func(*Client)
+
 // NewClient creates a new OSC client. The Client is used to send OSC
-// messages and OSC bundles over an UDP network connection. The `ip` argument
-// specifies the IP address and `port` defines the target port where the
-// messages and bundles will be send to.
-func NewClient(ip string, port int) *Client {
-	return &Client{ip: ip, port: port, laddr: nil}
+// messages and OSC bundles over a network connection.
+//
+// The default network protocol is UDP. To use TCP instead, use the ClientOption
+// ClientProtocol(TCP).
+//
+// The `ip` argument specifies the IP address and `port` defines the target port
+// where the messages and bundles will be send to.
+func NewClient(ip string, port int, opts ...ClientOption) *Client {
+	client := &Client{ip: ip, port: port, networkProtocol: UDP}
+
+	for _, opt := range opts {
+		opt(client)
+	}
+
+	if client.sendBytes == nil {
+		switch client.networkProtocol {
+		case UDP:
+			client.sendBytes = client.UDPSend(nil)
+
+		case TCP:
+			client.sendBytes = client.TCPSend(nil)
+		}
+	}
+
+	return client
 }
 
 // IP returns the IP address.
@@ -490,43 +540,150 @@ func (c *Client) SetPort(port int) { c.port = port }
 
 // SetLocalAddr sets the local address.
 func (c *Client) SetLocalAddr(ip string, port int) error {
-	laddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", ip, port))
-	if err != nil {
-		return err
+	switch c.networkProtocol {
+	case UDP:
+		laddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", ip, port))
+		if err != nil {
+			return err
+		}
+		c.sendBytes = c.UDPSend(laddr)
+		c.localAddrString = laddr.String()
+	case TCP:
+		laddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", ip, port))
+		if err != nil {
+			return err
+		}
+		c.sendBytes = c.TCPSend(laddr)
+		c.localAddrString = laddr.String()
 	}
-	c.laddr = laddr
+
 	return nil
+}
+
+// LocalAddrString returns a string representation of the local address, or
+// "unspecified" if unspecified.
+func (c *Client) LocalAddrString() string {
+	if c.localAddrString == "" {
+		return "unspecified"
+	}
+
+	return c.localAddrString
+}
+
+// NetworkProtocol returns the network protocol.
+func (c *Client) NetworkProtocol() NetworkProtocol {
+	return c.networkProtocol
+}
+
+// ClientProtocol sets the network protocol.
+func ClientProtocol(protocol NetworkProtocol) ClientOption {
+	return func(client *Client) {
+		client.networkProtocol = protocol
+	}
 }
 
 // Send sends an OSC Bundle or an OSC Message.
 func (c *Client) Send(packet Packet) error {
-	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", c.ip, c.port))
-	if err != nil {
-		return err
-	}
-	conn, err := net.DialUDP("udp", c.laddr, addr)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
 	data, err := packet.MarshalBinary()
 	if err != nil {
 		return err
 	}
 
-	if _, err = conn.Write(data); err != nil {
-		return err
+	return c.sendBytes(data)
+}
+
+// SendFunc is a function that sends bytes somewhere and returns an error if
+// something goes awry.
+type SendFunc func([]byte) error
+
+// UDPSend returns a SendFunc that sends bytes over UDP from the specified local
+// address. If laddr is nil, a local address is automatically chosen.
+func (c *Client) UDPSend(laddr *net.UDPAddr) SendFunc {
+	return func(data []byte) error {
+		addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", c.ip, c.port))
+		if err != nil {
+			return err
+		}
+
+		conn, err := net.DialUDP("udp", laddr, addr)
+		if err != nil {
+			return err
+		}
+		defer conn.Close()
+
+		if _, err := conn.Write(data); err != nil {
+			return err
+		}
+
+		return nil
 	}
-	return nil
+}
+
+// TCPSend returns a SendFunc that sends bytes over TCP from the specified local
+// address. If laddr is nil, a local address is automatically chosen.
+func (c *Client) TCPSend(laddr *net.TCPAddr) SendFunc {
+	return func(data []byte) error {
+		addr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", c.ip, c.port))
+		if err != nil {
+			return err
+		}
+		conn, err := net.DialTCP("tcp", laddr, addr)
+		if err != nil {
+			return err
+		}
+		defer conn.Close()
+
+		if _, err := conn.Write(data); err != nil {
+			return err
+		}
+
+		return nil
+	}
 }
 
 ////
 // Server
 ////
 
-// ListenAndServe retrieves incoming OSC packets and dispatches the retrieved
-// OSC packets.
+// ServerOption is a function that customizes a Server instance.
+type ServerOption func(*Server)
+
+// NewServer creates a new OSC server. The server receives OSC messages and
+// bundles over a network connection.
+//
+// The default network protocol is UDP. To use TCP instead, use the ServerOption
+// ServerProtocol(TCP).
+func NewServer(
+	addr string, dispatcher Dispatcher, readTimeout time.Duration,
+	opts ...ServerOption,
+) *Server {
+	srv := &Server{
+		Addr:        addr,
+		Dispatcher:  dispatcher,
+		ReadTimeout: readTimeout,
+	}
+	for _, opt := range opts {
+		opt(srv)
+	}
+	return srv
+}
+
+// NetworkProtocol returns the network protocol.
+func (s *Server) NetworkProtocol() NetworkProtocol {
+	return s.networkProtocol
+}
+
+// ServerProtocol sets the network protocol.
+func ServerProtocol(protocol NetworkProtocol) ServerOption {
+	return func(server *Server) {
+		server.networkProtocol = protocol
+	}
+}
+
+// ListenAndServe opens a connection, retrieves incoming OSC packets and
+// dispatches the retrieved OSC packets.
+//
+// The connection is closed in the event of an error or interruption.
 func (s *Server) ListenAndServe() error {
 	defer s.CloseConnection()
 
@@ -534,22 +691,36 @@ func (s *Server) ListenAndServe() error {
 		s.Dispatcher = NewStandardDispatcher()
 	}
 
-	ln, err := net.ListenPacket("udp", s.Addr)
-	if err != nil {
-		return err
+	switch s.networkProtocol {
+	case UDP:
+		ln, err := net.ListenPacket("udp", s.Addr)
+		if err != nil {
+			return err
+		}
+
+		s.close = ln.Close
+		return s.Serve(UDPReceive(ln))
+	case TCP:
+		l, err := net.Listen("tcp", s.Addr)
+		if err != nil {
+			return err
+		}
+
+		s.close = l.Close
+		return s.Serve(TCPReceive(l))
+	default:
+		return fmt.Errorf("unsupported network protocol: %v", s.networkProtocol)
 	}
-
-	s.close = ln.Close
-
-	return s.Serve(ln)
 }
 
-// Serve retrieves incoming OSC packets from the given connection and dispatches
-// retrieved OSC packets. If something goes wrong an error is returned.
-func (s *Server) Serve(c net.PacketConn) error {
+// Serve uses the provided ReceiveFunc to retrieve and dispatch incoming OSC
+// packets in a loop.
+//
+// Returns an error if something goes awry.
+func (s *Server) Serve(readPacket ReceiveFunc) error {
 	var tempDelay time.Duration
 	for {
-		msg, err := s.readFromConnection(c)
+		msg, err := readPacket(s.ReadTimeout)
 		if err != nil {
 			if ne, ok := err.(net.Error); ok && ne.Temporary() {
 				if tempDelay == 0 {
@@ -592,29 +763,63 @@ func (s *Server) CloseConnection() error {
 }
 
 // ReceivePacket listens for incoming OSC packets and returns the packet if one is received.
-func (s *Server) ReceivePacket(c net.PacketConn) (Packet, error) {
-	return s.readFromConnection(c)
+func (s *Server) ReceivePacket(read ReceiveFunc) (Packet, error) {
+	return read(s.ReadTimeout)
 }
 
-// readFromConnection retrieves OSC packets.
-func (s *Server) readFromConnection(c net.PacketConn) (Packet, error) {
-	if s.ReadTimeout != 0 {
-		if err := c.SetReadDeadline(time.Now().Add(s.ReadTimeout)); err != nil {
+// ReceiveFunc is a function that listens for incoming OSC packets and returns
+// either the first packet received, or an error if something went awry.
+type ReceiveFunc func(readTimeout time.Duration) (Packet, error)
+
+// UDPReceive returns a ReceiveFunc that uses the provided net.PacketConn to
+// receive a packet over UDP.
+func UDPReceive(c net.PacketConn) ReceiveFunc {
+	return func(readTimeout time.Duration) (packet Packet, err error) {
+		if readTimeout != 0 {
+			if err := c.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
+				return nil, err
+			}
+		}
+
+		data := make([]byte, 65535)
+		if _, _, err := c.ReadFrom(data); err != nil {
 			return nil, err
 		}
-	}
 
-	data := make([]byte, 65535)
-	n, _, err := c.ReadFrom(data)
-	if err != nil {
-		return nil, err
+		p, err := readPacket(bufio.NewReader(bytes.NewBuffer(data)))
+		if err != nil {
+			return nil, err
+		}
+		return p, nil
 	}
+}
 
-	p, err := readPacket(bufio.NewReader(bytes.NewBuffer(data[0:n])))
-	if err != nil {
-		return nil, err
+// TCPReceive returns a ReceiveFunc that uses the provided net.Listener to
+// receive a packet over TCP.
+func TCPReceive(l net.Listener) ReceiveFunc {
+	return func(readTimeout time.Duration) (packet Packet, err error) {
+		conn, err := l.Accept()
+		if err != nil {
+			return nil, err
+		}
+
+		if readTimeout != 0 {
+			if err := conn.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
+				return nil, err
+			}
+		}
+
+		data, err := ioutil.ReadAll(conn)
+		if err != nil {
+			return nil, err
+		}
+
+		p, err := readPacket(bufio.NewReader(bytes.NewBuffer(data)))
+		if err != nil {
+			return nil, err
+		}
+		return p, nil
 	}
-	return p, nil
 }
 
 // ParsePacket parses the given msg string and returns a Packet
@@ -1110,7 +1315,7 @@ func getTypeTag(arg interface{}) (string, error) {
 		return "h", nil
 	case float64:
 		return "d", nil
-	case Timetag:
+	case *Timetag:
 		return "t", nil
 	default:
 		return "", fmt.Errorf("unsupported type: %T", t)

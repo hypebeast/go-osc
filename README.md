@@ -7,22 +7,23 @@
 
 ## Features
 
--   OSC Bundles, including timetags
--   OSC Messages
--   OSC Client
--   OSC Server
--   Supports the following OSC argument types:
-    -   'i' (Int32)
-    -   'f' (Float32)
-    -   's' (string)
-    -   'b' (blob / binary data)
-    -   'h' (Int64)
-    -   't' (OSC timetag)
-    -   'd' (Double/int64)
-    -   'T' (True)
-    -   'F' (False)
-    -   'N' (Nil)
--   Support for OSC address pattern including '\*', '?', '{,}' and '[]' wildcards
+- UDP (default) or TCP
+- OSC Bundles, including timetags
+- OSC Messages
+- OSC Client
+- OSC Server
+- Supports the following OSC argument types:
+  - 'i' (Int32)
+  - 'f' (Float32)
+  - 's' (string)
+  - 'b' (blob / binary data)
+  - 'h' (Int64)
+  - 't' (OSC timetag)
+  - 'd' (Double/int64)
+  - 'T' (True)
+  - 'F' (False)
+  - 'N' (Nil)
+- Support for OSC address pattern including '\*', '?', '{,}' and '[]' wildcards
 
 ## Install
 
